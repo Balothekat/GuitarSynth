@@ -1,0 +1,24 @@
+name: Test calibrated detector
+on:
+  workflow_dispatch:
+  push:
+    branches: [calibrated-chords]
+permissions:
+  contents: read
+jobs:
+  replay-tool:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile calibration replay and synthetic checks
+        run: |
+          clang++ -std=c++17 -O3 -mmacosx-version-min=14.0 -arch x86_64 -arch arm64 Source/CalibratedReplay.cpp -o calibrated_replay
+          clang++ -std=c++17 -O3 -mmacosx-version-min=14.0 Source/CalibratedTest.cpp -o calibrated_test
+          codesign --force --sign - calibrated_replay
+          codesign --verify --strict calibrated_replay
+      - name: Verify no synthetic open-string harmonics become extra MIDI notes
+        run: ./calibrated_test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Calibrated-Replay-Mac
+          path: calibrated_replay

@@ -1,0 +1,17 @@
+#include "CalibratedTracker.h"
+#include <iostream>
+int main(){
+ bool ok=true;
+ for(double rate:{44100.0,48000.0})for(int s=0;s<6;++s){
+  CalibratedTracker tracker;tracker.prepare(rate);int valid=0,falseNotes=0;
+  for(int i=0;i<(int)(rate*0.7);++i){double x=0;for(int h=0;h<12;++h){auto p=GuitarProfile::partials[s][h];double f=GuitarProfile::openHz[s]*p.ratio;
+    if(f<rate*0.45)x+=0.025*p.amplitude*std::sin(6.283185307179586*f*i/rate);}
+   if(tracker.push((float)x,0.008f)&&i>rate*0.25){auto notes=tracker.getStrengths();for(int n=0;n<CalibratedTracker::notes;++n)if(notes[n]>0){if(n+CalibratedTracker::first==GuitarProfile::openNotes[s])++valid;else ++falseNotes;}}
+  }
+  std::cout<<"Calibrated string "<<s<<" sample rate "<<rate<<" valid frames "<<valid<<" false frames "<<falseNotes<<'\n';
+  if(!valid||falseNotes)ok=false;
+  for(int i=0;i<(int)(rate*0.3);++i)tracker.push(0,0.008f);
+  for(float v:tracker.getStrengths())if(v>0)ok=false;
+ }
+ return ok?0:1;
+}
