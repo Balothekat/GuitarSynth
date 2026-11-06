@@ -21,7 +21,7 @@ public:
  }
  void reset() {
   ring.fill(0);strength.fill(0);streak.fill(0);absence.fill(0);held.fill(false);
-  prior.fill(0);lastAmplitude.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;fastEnergy=slowEnergy=0;attackAge=0;
+  prior.fill(0);lastAmplitude.fill(0);heldHz.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;fastEnergy=slowEnergy=0;attackAge=0;
  }
  bool push(float x,float gate) {
   double square=(double)x*x;fastEnergy+=(square-fastEnergy)*fastCoefficient;
@@ -51,7 +51,7 @@ private:
  std::array<Tone,24> tones{};
  std::array<Candidate,24> candidates{},accepted{};
  Strengths strength{};
- std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{};
+ std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{},heldHz{};
  std::array<int,notes> streak{},absence{};
  std::array<bool,notes> held{};
  int divisor=1,index=0,filled=0,sub=0,hop=0;
@@ -112,6 +112,13 @@ private:
    if(!held[c.note-first]&&attackAge>0.45)continue;
    double minimum=held[c.note-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
    if(c.amp<=minimum)continue;
+   // Even a temporarily masked lower fundamental can explain an upper partial.
+   bool explained=false;
+   for(int k=0;k<toneCount&&!explained;++k){const auto& lower=tones[k];if(lower.hz>=t.hz*0.75||lower.amplitude()<peak*0.045)continue;Candidate lowerMap;
+    if(!map(lower.hz,lowerMap))continue;
+    for(int h=1;h<12;++h){auto part=GuitarProfile::partials[lowerMap.string][h];double target=lower.hz*part.ratio;
+     if(std::abs(std::log2(t.hz/target))<0.04&&c.amp<lower.amplitude()*(std::max(1.0,part.amplitude*2.5)+0.15)){explained=true;break;}}}
+   if(explained)continue;
    // A new guitar note needs corroborating partials, not just a pick/mute peak.
    bool supported=held[c.note-first]||(c.note<=64&&c.amp>peak*0.22);
    for(int h=1;h<=3&&!supported;++h){auto partial=GuitarProfile::partials[c.string][h];double expected=t.hz*partial.ratio;
@@ -134,9 +141,19 @@ private:
    // Three agreements in six frames tolerate a weak string being briefly masked.
    streak[n]=((streak[n]<<1)|(candidateAmp[n]>0?1:0))&63;
    if(candidateAmp[n]>0){absence[n]=0;int votes=0;for(int bits=streak[n];bits;bits>>=1)votes+=bits&1;
-    if(votes>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];
+    if(votes>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];heldHz[n]=candidateHz[n];
    }else{absence[n]=std::min(4,absence[n]+1);if(absence[n]>=4)held[n]=false;}
    if(held[n])strength[n]=(float)lastAmplitude[n];}
+  // A six-string guitar cannot sustain two different frets on the same string.
+  // Find a feasible available string for each pitch, strongest evidence first.
+  std::array<int,notes> order{};for(int n=0;n<notes;++n)order[n]=n;
+  std::sort(order.begin(),order.end(),[this](int a,int b){return strength[a]>strength[b];});
+  std::array<bool,6> occupied{};
+  for(int n:order)if(strength[n]>0){int selected=-1;double best=0.32;
+   for(int s=0;s<6;++s)if(!occupied[s]){double position=12*std::log2(heldHz[n]/GuitarProfile::openHz[s]);int fret=(int)std::round(position);double error=std::abs(position-fret);
+    if(fret>=0&&fret<=24&&GuitarProfile::openNotes[s]+fret==n+first&&error<best){selected=s;best=error;}}
+   if(selected<0){strength[n]=0;held[n]=false;}else occupied[selected]=true;
+  }
   // Release tails cannot expand the active voice set beyond six.
   for(int iteration=0;iteration<notes;++iteration){int count=0,weakest=-1;float lowest=1e30f;
    for(int n=0;n<notes;++n)if(strength[n]>0){++count;if(strength[n]<lowest){lowest=strength[n];weakest=n;}}
