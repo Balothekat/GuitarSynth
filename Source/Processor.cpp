@@ -70,7 +70,7 @@ public:
   const double release=*params.getRawParameterValue("release");
   const float gain=*params.getRawParameterValue("gain");
   const float tone=*params.getRawParameterValue("tone");
-  const int wave=juce::roundToInt(*params.getRawParameterValue("wave"));
+  const int wave=juce::roundToInt(params.getRawParameterValue("wave")->load());
   juce::ADSR::Parameters shape;
   shape.attack=*params.getRawParameterValue("attack");
   shape.decay=*params.getRawParameterValue("decay");
