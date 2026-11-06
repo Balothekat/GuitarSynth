@@ -106,7 +106,19 @@ private:
   noiseRatio=after/(before+1e-12);if(noiseRatio>=0.15)return;
   for(int j=0;j<toneCount;++j)peak=std::max(peak,tones[j].amplitude());
   recentPeak=std::max(peak,recentPeak);
-  int count=0;std::array<Candidate,notes> bestByNote{};
+  int count=0;std::array<Candidate,notes> bestByNote{};std::array<double,notes> refinementQuality{};
+  // Retain strong directly observed fundamentals. Harmonic inference refines
+  // weak/blurred peaks; it must not replace clear low-string evidence.
+  for(int j=0;j<toneCount;++j){const auto& tone=tones[j];if(tone.hz<68||tone.hz>1500)continue;Candidate c;
+   if(!map(tone.hz,c))continue;c.amp=tone.amplitude();int n=c.note-first;
+   if(!held[n]&&attackAge>0.45)continue;
+   if(c.amp<=(held[n]?peak*0.045:std::max(peak*0.14,recentPeak*0.13)))continue;
+   bool open=false;for(int key:GuitarProfile::openNotes)open|=key==c.note;
+   bool supported=held[n]||((c.note<=51||open)&&c.amp>peak*0.22);
+   for(int h=1;h<=2&&!supported;++h){auto part=GuitarProfile::partials[c.string][h];double target=tone.hz*part.ratio;
+    for(int k=0;k<toneCount;++k)if(k!=j&&tones[k].amplitude()>c.amp*0.1&&std::abs(std::log2(tones[k].hz/target))<0.04){supported=true;break;}}
+   if(supported&&c.amp>bestByNote[n].amp)bestByNote[n]=c;
+  }
   // Infer fundamentals from two agreeing, calibrated upper partials. A quiet
   // fundamental need not be an isolated FFT peak between louder neighboring strings.
   for(int string=0;string<6;++string)for(int fret=0;fret<=24;++fret){
@@ -125,9 +137,11 @@ private:
     if(agreements>=2&&primary&&total>bestWeight){bestWeight=total;chosen=weighted/total;}
    }
    if(chosen==0||std::abs(12*std::log2(chosen/centre))>=0.32)continue;
+   bool nearObserved=false;for(int j=0;j<toneCount;++j)if(std::abs(tones[j].hz-chosen)<rate/N*0.65&&tones[j].amplitude()>peak*0.03){nearObserved=true;break;}
+   if(!nearObserved)continue;
    double amplitude=fit(chosen,true).amplitude();double minimum=held[key-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
-   if(amplitude<=minimum)continue;Candidate c{chosen,amplitude,key,string};
-   if(c.amp>bestByNote[key-first].amp)bestByNote[key-first]=c;
+   if(amplitude<=minimum)continue;Candidate c{chosen,amplitude,key,string};int n=key-first;
+   if(bestWeight>refinementQuality[n]){c.amp=std::max(c.amp,bestByNote[n].amp);bestByNote[n]=c;refinementQuality[n]=bestWeight;}
   }
   for(const auto& c:bestByNote)if(c.amp>0)candidates[count++]=c;
   std::sort(candidates.begin(),candidates.begin()+count,[](const auto& a,const auto& b){return a.hz<b.hz;});
