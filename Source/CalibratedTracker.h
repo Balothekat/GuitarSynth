@@ -43,7 +43,7 @@ private:
  std::array<double,N> real{},imaginary{},twiddleRe{},twiddleIm{};
  std::array<int,N> bitReverse{};
  std::array<double,N/2+1> magnitude{};
- std::array<Tone,16> tones{};
+ std::array<Tone,24> tones{};
  std::array<Candidate,24> candidates{},accepted{};
  Strengths strength{};
  std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{};
