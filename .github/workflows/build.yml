@@ -10,18 +10,24 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-      - name: Configure universal plugin
-        run: cmake -S . -B build -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+      - name: Configure universal plugin for macOS 14
+        run: cmake -S . -B build -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0
       - name: Compile
         run: cmake --build build --config Release --parallel 3
       - name: Test synthetic tracking
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Verify minimum macOS version and signature
+        run: |
+          BUNDLE="build/GuitarLink_artefacts/Release/VST3/GuitarLink.vst3"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$BUNDLE/Contents/Info.plist")" = "14.0"
+          xcrun vtool -show-build "$BUNDLE/Contents/MacOS/GuitarLink"
+          codesign --verify --deep --strict "$BUNDLE"
       - name: Package
         run: |
           mkdir -p dist
           ditto "build/GuitarLink_artefacts/Release/VST3/GuitarLink.vst3" "dist/GuitarLink.vst3"
-          ditto -c -k --sequesterRsrc --keepParent dist GuitarLink-Mac.zip
+          ditto -c -k --sequesterRsrc --keepParent dist GuitarLink-macOS14.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: GuitarLink-Mac
-          path: GuitarLink-Mac.zip
+          name: GuitarLink-macOS14
+          path: GuitarLink-macOS14.zip
