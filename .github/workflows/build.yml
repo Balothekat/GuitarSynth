@@ -2,7 +2,7 @@ name: Build GuitarLink Mac
 on:
   workflow_dispatch:
   push:
-    branches: [main, calibrated-chords]
+    branches: [main]
 permissions:
   contents: read
 jobs:

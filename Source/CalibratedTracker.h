@@ -20,13 +20,14 @@ public:
  }
  void reset() {
   ring.fill(0);strength.fill(0);streak.fill(0);absence.fill(0);held.fill(false);
-  prior.fill(0);lastAmplitude.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;
+  prior.fill(0);lastAmplitude.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;
  }
  bool push(float x,float gate) {
   envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.003f);
   sum+=x;if(++sub<divisor)return false;
   ring[index]=sum/divisor;sum=0;sub=0;index=(index+1)%N;filled=std::min(N,filled+1);
   if(++hop<hopSize)return false;hop=0;
+  recentPeak*=std::exp(-hopSize/(rate*0.6));
   candidateAmp.fill(0);candidateHz.fill(0);
   if(filled==N&&envelope>=gate)analyse();
   update();return true;
@@ -49,7 +50,7 @@ private:
  std::array<int,notes> streak{},absence{};
  std::array<bool,notes> held{};
  int divisor=1,index=0,filled=0,sub=0,hop=0;
- double rate=22050,sum=0,noiseRatio=1;
+ double rate=22050,sum=0,noiseRatio=1,recentPeak=0;
  float envelope=0;
 
  void spectrum() {
@@ -96,12 +97,14 @@ private:
   for(int i=0;i<N;++i){before+=window[i]*original[i]*original[i];after+=window[i]*residual[i]*residual[i];}
   noiseRatio=after/(before+1e-12);if(noiseRatio>=0.15)return;
   for(int j=0;j<toneCount;++j)peak=std::max(peak,tones[j].amplitude());
+  recentPeak=std::max(peak,recentPeak);
   int count=0;
   for(int j=0;j<toneCount;++j){const auto& t=tones[j];if(t.hz<68||t.hz>1500)continue;Candidate c;
    if(!map(t.hz,c))continue;c.amp=t.amplitude();
-   if(c.amp<=peak*(held[c.note-first]?0.045:0.14))continue;
+   double minimum=held[c.note-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
+   if(c.amp<=minimum)continue;
    // A new guitar note needs corroborating partials, not just a pick/mute peak.
-   bool supported=held[c.note-first];
+   bool supported=held[c.note-first]||(c.note<=64&&c.amp>peak*0.22);
    for(int h=1;h<=3&&!supported;++h){auto partial=GuitarProfile::partials[c.string][h];double expected=t.hz*partial.ratio;
     for(int k=0;k<toneCount;++k)if(k!=j&&tones[k].amplitude()>c.amp*0.075&&std::abs(std::log2(tones[k].hz/expected))<0.018){supported=true;break;}}
    if(supported)candidates[count++]=c;}
@@ -110,7 +113,7 @@ private:
   for(int j=0;j<count;++j){auto c=candidates[j];bool harmonic=false,duplicate=false;
    for(int k=0;k<kept;++k){const auto& lower=accepted[k];duplicate|=lower.note==c.note;
     for(int h=1;h<12;++h){auto partial=GuitarProfile::partials[lower.string][h];double expected=lower.hz*partial.ratio;
-     if(std::abs(std::log2(c.hz/expected))<0.022&&c.amp<lower.amp*(partial.amplitude*2.5+0.15))harmonic=true;}}
+     if(std::abs(std::log2(c.hz/expected))<0.04&&c.amp<lower.amp*(partial.amplitude*2.5+0.15))harmonic=true;}}
    if(!harmonic&&!duplicate)accepted[kept++]=c;
   }
   std::sort(accepted.begin(),accepted.begin()+kept,[](const auto& a,const auto& b){return a.amp>b.amp;});
