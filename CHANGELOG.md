@@ -9,3 +9,5 @@
 - Monophonic repeated same-pitch picking still does not reliably retrigger. Chord tracking can miss quiet strings, confuse harmonics and struggle with bends / detuning.
 - Chord mode uses a 1024-sample window at approximately 16 kHz: 64-70 ms cold-start observation, plus confirmation, interface and external-synth delay.
 - No zero-latency claim. Hardware latency and actual guitar performance require user testing.
+
+Known failing stress test: close low-register semitone cluster E3/F3 (MIDI 52/53). Can produce extra MIDI notes. Not supported in this experimental release. Standard tested synthetic triads and six-note E-minor voicing are gated checks.

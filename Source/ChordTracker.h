@@ -60,7 +60,7 @@ public:
   for(int k=0;k<bins;++k){spectrum[k]=std::abs(fft[k]);peak=std::max(peak,spectrum[k]);}
   residual=spectrum;
   // L1 penalty discourages adding harmonics as independent notes.
-  for(int pass=0;pass<30;++pass)for(int n=0;n<notes;++n) {
+  for(int pass=0;pass<14;++pass)for(int n=0;n<notes;++n) {
    float dot=0;for(int k=1;k<bins;++k)dot+=templates[n][k]*residual[k];
    float next=std::max(0.0f,strength[n]+dot-peak*0.075f);
    float delta=next-strength[n];strength[n]=next;
