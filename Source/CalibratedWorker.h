@@ -3,6 +3,10 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <sys/qos.h>
+#endif
 
 // Single audio producer / single analysis consumer. The audio callback never
 // locks, waits for analysis, or overwrites a frame owned by the analysis thread.
@@ -48,7 +52,13 @@ private:
     result.state.store(2,std::memory_order_release);return;
    }}
  }
- void run(){uint64_t generation=0,serial=0;
+ void run(){
+#if defined(__APPLE__)
+  // Audio analysis is user-initiated work, even when the host/launcher is in
+  // the background. This is ordinary QoS, not a real-time audio thread.
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED,0);
+#endif
+  uint64_t generation=0,serial=0;
   while(running.load(std::memory_order_acquire)){
    auto current=epoch.load(std::memory_order_acquire);
    if(current!=generation){generation=current;read.store(write.load(std::memory_order_acquire),std::memory_order_release);detector.reset();publish(generation,++serial);}
