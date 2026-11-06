@@ -113,16 +113,16 @@ private:
    int key=GuitarProfile::openNotes[string]+fret;if(key<first||key>last)continue;
    if(!held[key-first]&&attackAge>0.45)continue;
    double centre=GuitarProfile::openHz[string]*std::pow(2.0,fret/12.0);
-   std::array<double,5> estimates{},weights{};int matches=0;
+   std::array<double,5> estimates{},weights{};std::array<int,5> harmonicNumbers{};int matches=0;
    for(int h=1;h<=5;++h){auto part=GuitarProfile::partials[string][h];double target=centre*part.ratio,largest=0,frequency=0;
     double low=target*0.976,high=target*1.025;
     for(int k=0;k<toneCount;++k){double amplitude=tones[k].amplitude();if(tones[k].hz>low&&tones[k].hz<high&&amplitude>peak*0.035&&amplitude>largest){largest=amplitude;frequency=tones[k].hz;}}
-    if(frequency>0){estimates[matches]=frequency/part.ratio;weights[matches]=largest/std::max(0.1,part.amplitude);++matches;}
+    if(frequency>0){estimates[matches]=frequency/part.ratio;weights[matches]=largest/std::max(0.1,part.amplitude);harmonicNumbers[matches]=h+1;++matches;}
    }
    double chosen=0,bestWeight=0;
-   for(int seed=0;seed<matches;++seed){int agreements=0;double weighted=0,total=0;
-    for(int j=0;j<matches;++j)if(std::abs(std::log2(estimates[j]/estimates[seed]))<0.02){++agreements;weighted+=estimates[j]*weights[j];total+=weights[j];}
-    if(agreements>=2&&total>bestWeight){bestWeight=total;chosen=weighted/total;}
+   for(int seed=0;seed<matches;++seed){int agreements=0;bool primary=false;double weighted=0,total=0;
+    for(int j=0;j<matches;++j)if(std::abs(std::log2(estimates[j]/estimates[seed]))<0.02){++agreements;primary|=harmonicNumbers[j]<=3;weighted+=estimates[j]*weights[j];total+=weights[j];}
+    if(agreements>=2&&primary&&total>bestWeight){bestWeight=total;chosen=weighted/total;}
    }
    if(chosen==0||std::abs(12*std::log2(chosen/centre))>=0.32)continue;
    double amplitude=fit(chosen,true).amplitude();double minimum=held[key-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
