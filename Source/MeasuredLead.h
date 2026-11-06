@@ -13,13 +13,16 @@ public:
   divisor=std::max(1,(int)std::ceil(sr/12000.0));rate=sr/divisor;
   lowLag=std::max(3,(int)std::floor(rate/(GuitarProfile::openHz[5]*4*1.03)));
   highLag=std::min(250,(int)std::ceil(rate/(GuitarProfile::openHz[0]*0.975)));
+  for(int i=0;i<2;++i){double q=i==0?0.5411961001:1.306562965;double w=6.283185307179586*1800/sr,c=std::cos(w),alpha=std::sin(w)/(2*q),a0=1+alpha;
+   filter[i]={(1-c)/(2*a0),(1-c)/a0,(1-c)/(2*a0),-2*c/a0,(1-alpha)/a0,0,0};}
   analysisHop=64;reset();
  }
- void reset(){ring.fill(0);scores.fill(1);index=filled=sub=hop=0;sum=0;
+ void reset(){for(auto& section:filter){section.z1=section.z2=0;}ring.fill(0);scores.fill(1);index=filled=sub=hop=0;sum=0;
   envelope=peak=0;note=pending=-1;votes=missing=0;frequency=centre=0;}
  bool push(float x,float gate){
   envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.003f);
-  sum+=x;if(++sub<divisor)return false;
+  double filtered=x;for(auto& section:filter){double y=section.b0*filtered+section.z1;section.z1=section.b1*filtered-section.a1*y+section.z2;section.z2=section.b2*filtered-section.a2*y;filtered=y;}
+  sum+=filtered;if(++sub<divisor)return false;
   ring[index]=(float)(sum/divisor);sum=0;sub=0;index=(index+1)%1024;filled=std::min(1024,filled+1);
   if(++hop<analysisHop)return false;hop=0;
   if(envelope<(note>=0?gate*0.65f:gate)||filled<2*highLag+4){miss();return true;}
@@ -59,6 +62,8 @@ public:
  double getFrequency()const{return frequency;}
  float level()const{return envelope;}
 private:
+ struct Biquad {double b0=0,b1=0,b2=0,a1=0,a2=0,z1=0,z2=0;};
+ std::array<Biquad,2> filter{};
  std::array<float,1024> ring{};std::array<double,256> scores{};
  int divisor=4,lowLag=8,highLag=160,analysisHop=64,index=0,filled=0,sub=0,hop=0;
  int note=-1,pending=-1,votes=0,missing=0;double rate=11025,sum=0,frequency=0,centre=0;
