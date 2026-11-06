@@ -1,4 +1,4 @@
-# GuitarLink 0.4
+# GuitarLink 0.5
 Experimental guitar-to-MIDI VST3 and test synth for macOS 14 or newer, Intel and Apple Silicon. Built on GitHub; development tools are not needed on the player's Mac. Original code and interface; not affiliated with GuitarCatcher or Nudist Audio.
 
 ## Install and route in Ableton
@@ -13,9 +13,10 @@ macOS may require approval for this ad-hoc signed test build. It is not notarize
 - Fast Lead: single-note live playing with the shortest analysis path.
 - Stable Lead: single-note playing with more smoothing.
 - Chords (experimental): older general-purpose chord prototype.
+- DAEAC#E / lead: new monophonic tracker with measured tuning offsets, pitch confirmation, vibrato hysteresis and decay-harmonic rejection. It sends note-off before the next note-on and keeps the built-in synth monophonic. Select this for single-note leads. Pitch bend is disabled in this mode.
 - DAEAC#E / measured: new strum-oriented accuracy mode calibrated from six open-string recordings in D–A–E–A–C♯–E tuning. See CALIBRATED-MODE.md.
 
-The measured mode is specific to the recorded guitar and its actual string pitches. It identifies supported fundamentals and suppresses harmonics instead of guessing all six sounding strings. Octave duplicates may be omitted. New tones need an attack; legato, hammer-ons and bends are not reliable. Fast Lead remains preferable for latency-sensitive single notes.
+Both DAEAC#E modes are specific to the recorded guitar and its actual string pitches. The measured chord mode identifies supported fundamentals and suppresses harmonics instead of guessing all six sounding strings. Octave duplicates may be omitted. New tones need an attack; legato, hammer-ons and bends are not reliable. Fast Lead remains preferable for latency-sensitive single notes.
 
 ## Latency and limits
 Zero latency is not achievable. The measured mode uses a roughly 85–93 ms analysis window plus confirmation and asynchronous processing; interface buffers and the receiving synth add further delay. Lowering Ableton's buffer cannot remove the detector's own delay. Try 128 samples, then 64 if your system plays without dropouts. Measured-mode accuracy and CPU have limited recorded-guitar coverage and are not established for arbitrary chords or guitars.
@@ -24,3 +25,5 @@ The plug-in includes a small six-voice test synth, ADSR, dry/synth mix, gate, le
 
 ## Build and verification
 The GitHub workflow builds JUCE 8.0.10 with CMake/Xcode on its Mac runner, runs core/string/chord/worker tests and full processor MIDI/synth checks, renders the actual editor, and checks signing and macOS 14 compatibility. The calibration workflow also builds a standalone local AIFF replay tool, including a paced worker mode. Passing tests does not imply Ableton host validation. Review JUCE's license before distribution.
+
+The lead detector has fixed-size storage and performs no allocations or waiting. It uses about 29–31 ms of history plus pitch confirmation for the initial note; host/interface/synth delay is additional. It does not promise zero latency. Synthetic tests cover six strings at six fret positions, picked transitions, harmonic decay, silence and noise. Actual fast-lead phrases still need player testing. Same-pitch repetitions may remain legato. External synth release settings can sustain a sound after its MIDI note-off; choose a short release or a monophonic synth patch for tight leads.

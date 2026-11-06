@@ -7,7 +7,7 @@ class Preview final:public juce::JUCEApplication {
  std::unique_ptr<juce::AudioProcessorEditor> editor;
 public:
  const juce::String getApplicationName() override{return "GuitarLink Preview";}
- const juce::String getApplicationVersion() override{return "0.4";}
+ const juce::String getApplicationVersion() override{return "0.5";}
  void initialise(const juce::String& command) override {
   processor.reset(createPluginFilter());
   processor->setNonRealtime(true);
@@ -94,6 +94,35 @@ public:
    }
   }
   feedMeasured(true,240);
+  for(auto* parameter:processor->getParameters())
+   if(auto* ranged=dynamic_cast<juce::RangedAudioParameter*>(parameter))
+    if(ranged->getParameterID()=="tracking")ranged->setValueNotifyingHost(ranged->convertTo0to1(4));
+  // Begin while the measured chord is held: switching to lead must first
+  // release every old chord note, and no lead note-ons may overlap.
+  std::array<bool,128> leadActive{};for(int key:{42,49,52,57})leadActive[key]=true;
+  int previousLead=-1;
+  auto feedLead=[&](int fret,int blocks){bool reached=fret<0;int target=fret<0?-1:GuitarProfile::openNotes[1]+fret;
+   for(int block=0;block<blocks;++block){for(int i=0;i<128;++i){double sample=0,time=(block*128+i)/48000.0;
+     if(fret>=0){double base=GuitarProfile::openHz[1]*std::pow(2.0,fret/12.0);
+      for(auto part:GuitarProfile::partials[1])if(base*part.ratio<48000*0.45)sample+=0.018*part.amplitude*std::sin(6.283185307179586*base*part.ratio*time);
+      sample*=std::min(1.0,time/0.002)*std::exp(-time*1.5);}
+     audio.setSample(0,i,(float)sample);audio.setSample(1,i,(float)sample);}
+    midi.clear();processor->processBlock(audio,midi);
+    for(auto event:midi){auto message=event.getMessage();int key=message.getNoteNumber();
+     if(message.isNoteOff())leadActive[key]=false;
+     if(message.isNoteOn()){
+      if(std::any_of(leadActive.begin(),leadActive.end(),[](bool v){return v;})){std::cerr<<"Measured lead overlapping MIDI notes\n";setApplicationReturnValue(9);return false;}
+      if(key!=target&&key!=previousLead){std::cerr<<"Measured lead wrong pitch "<<key<<" target "<<target<<'\n';setApplicationReturnValue(8);return false;}
+      leadActive[key]=true;reached|=key==target;
+     }
+    }
+   }
+   if(!reached){std::cerr<<"Measured lead missing target "<<target<<'\n';setApplicationReturnValue(10);return false;}previousLead=target;return true;
+  };
+  for(int fret:{0,2,4,5,7,12,7})if(!feedLead(fret,60)){quit();return;}
+  if(!feedLead(-1,100)){quit();return;}
+  if(std::any_of(leadActive.begin(),leadActive.end(),[](bool v){return v;})||audio.getMagnitude(0,128)>0.0001f){setApplicationReturnValue(11);quit();return;}
+  if(!feedLead(4,60)){quit();return;}
   editor.reset(processor->createEditor());
   editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
   editor->setVisible(true);

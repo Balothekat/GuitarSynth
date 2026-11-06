@@ -69,7 +69,7 @@ private:
  int note=-1,pending=-1,votes=0,missing=0;double rate=11025,sum=0,frequency=0,centre=0;
  float envelope=0,peak=0;
  void clear(){note=pending=-1;votes=missing=0;frequency=centre=0;peak=0;}
- void miss(){pending=-1;votes=0;if(++missing>=3)clear();}
+ void miss(){pending=-1;votes=0;if(++missing>=7)clear();}
  int map(double hz,double& mappedCentre)const{
   if(note>=0&&centre>0&&std::abs(12*std::log2(hz/centre))<0.65){mappedCentre=centre;return note;}
   double best=0.48;int target=-1;

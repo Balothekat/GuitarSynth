@@ -2,6 +2,7 @@
 #include "Tracker.h"
 #include "ChordTracker.h"
 #include "CalibratedWorker.h"
+#include "MeasuredLead.h"
 class GuitarLinkEditor;
 class GuitarLink final:public juce::AudioProcessor {
 public:
@@ -33,7 +34,7 @@ public:
   p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"wave",1},
    "Oscillator",juce::StringArray{"Sine","Warm","Hollow"},1));
   p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"tracking",1},
-   "Tracking mode",juce::StringArray{"Fast Lead","Stable Lead","Chords (experimental)","DAEAC#E / measured"},0));
+   "Tracking mode",juce::StringArray{"Fast Lead","Stable Lead","Chords (experimental)","DAEAC#E / measured","DAEAC#E / lead"},0));
   p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"bend",1},
    "Follow bends (lead only; receiver +/-2 semitones)",false));
   p.add(std::make_unique<juce::AudioParameterBool>(juce::ParameterID{"panic",1},
@@ -47,7 +48,7 @@ public:
  bool hasEditor()const override{return true;}
  juce::AudioProcessorEditor* createEditor()override;
  void prepareToPlay(double sr,int)override {
-  rate=sr;tracker.prepare(sr);chords.prepare(sr);calibrated.prepare(sr);calWorker.start(sr);held.fill(false);
+  rate=sr;tracker.prepare(sr);chords.prepare(sr);calibrated.prepare(sr);measuredLead.prepare(sr);calWorker.start(sr);held.fill(false);
   presence.fill(0);absence.fill(0);candidate=note=-1;stable=miss=0;
   previousMode=-1;lastWheel=8192;scopeCounter=0;resetPending=true;
   for(auto& voice:voices){voice.envelope.setSampleRate(sr);voice.envelope.reset();voice.note=-1;voice.phase=0;}
@@ -71,10 +72,10 @@ public:
   for(auto& v:voices)v.envelope.setParameters(shape);
   if(resetPending||previousMode!=mode||panic) {
    clear(midi,0,true);resetPending=false;
-   if(previousMode!=mode){tracker.reset();chords.reset();calibrated.reset();calWorker.reset();trackingBusy=false;}
+   if(previousMode!=mode){tracker.reset();chords.reset();calibrated.reset();measuredLead.reset();calWorker.reset();trackingBusy=false;}
    previousMode=mode;
   }
-  if(panic&&!previousPanic){calibrated.reset();calWorker.reset();}
+  if(panic&&!previousPanic){calibrated.reset();measuredLead.reset();calWorker.reset();}
   previousPanic=panic;
   tracker.setFast(mode==0);
   if(mode==3&&!isNonRealtime()){
@@ -99,6 +100,18 @@ public:
     if(rawEnvelope<gate*0.5f)++quietSamples;else{quietSamples=0;quietReset=false;}
     if(!isNonRealtime()&&!quietReset&&quietSamples>rate*0.05){
      clear(midi,i,false);calWorker.reset();quietReset=true;
+    }
+   } else if(mode==4) {
+    if(!panic&&measuredLead.push(x,gate)){
+     int next=measuredLead.getNote();
+     if(next!=note){
+      // MIDI note-off precedes note-on; the built-in synth also reuses a
+      // single voice so a previous release tail cannot overlap a new pitch.
+      stopLead(midi,i);
+      if(next>=0){for(auto& voice:voices){voice.envelope.reset();voice.note=-1;}
+       note=next;start(next,440*std::pow(2.0,(next-69)/12.0),measuredLead.level(),midi,i);}
+     }
+     currentPitch=(float)next;
     }
    } else if(mode==2) {
     if(chords.push(x,gate)&&!panic) {
@@ -163,10 +176,10 @@ public:
    if(key>=40&&key<=88)mask|=uint64_t(1)<<(key-40);}
   activeMask.store(mask,std::memory_order_relaxed);liveCount.store(count,std::memory_order_relaxed);
   livePitch.store(count==0?-1:(mode>=2?(float)lowest:currentPitch),std::memory_order_relaxed);
-  inputLevel.store(mode==3?rawEnvelope:mode==2?chords.level():tracker.level(),std::memory_order_relaxed);
+  inputLevel.store(mode==4?measuredLead.level():mode==3?rawEnvelope:mode==2?chords.level():tracker.level(),std::memory_order_relaxed);
  }
  void processBlockBypassed(juce::AudioBuffer<float>&,juce::MidiBuffer& midi)override {
-  midi.clear();clear(midi,0,true);calibrated.reset();calWorker.reset();resetPending=true;livePitch=-1;liveCount=0;activeMask=0;
+  midi.clear();clear(midi,0,true);calibrated.reset();measuredLead.reset();calWorker.reset();resetPending=true;livePitch=-1;liveCount=0;activeMask=0;
  }
  int getNumPrograms()override{return 1;}int getCurrentProgram()override{return 0;}
  void setCurrentProgram(int)override{}const juce::String getProgramName(int)override{return {};}
@@ -181,7 +194,7 @@ public:
 private:
  struct Voice {int note=-1;double phase=0,frequency=0;juce::ADSR envelope;};
  juce::AudioProcessorValueTreeState params;
- Tracker tracker;ChordTracker chords;CalibratedTracker calibrated;CalibratedWorker calWorker;std::array<Voice,6> voices;
+ Tracker tracker;MeasuredLead measuredLead;ChordTracker chords;CalibratedTracker calibrated;CalibratedWorker calWorker;std::array<Voice,6> voices;
  float rawEnvelope=0;bool previousPanic=false,quietReset=false;int quietSamples=0;
  std::array<bool,128> held{};std::array<int,128> presence{},absence{};
  double rate=48000;float currentPitch=-1;
