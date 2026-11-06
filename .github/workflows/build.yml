@@ -1,0 +1,27 @@
+name: Build GuitarLink Mac
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure universal plugin
+        run: cmake -S . -B build -G Xcode "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+      - name: Compile
+        run: cmake --build build --config Release --parallel 3
+      - name: Test synthetic tracking
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto "build/GuitarLink_artefacts/Release/VST3/GuitarLink.vst3" "dist/GuitarLink.vst3"
+          ditto -c -k --sequesterRsrc --keepParent dist GuitarLink-Mac.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GuitarLink-Mac
+          path: GuitarLink-Mac.zip
