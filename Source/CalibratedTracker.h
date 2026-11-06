@@ -172,6 +172,10 @@ private:
  }
  void update() {
   strength.fill(0);
+  // Within one strum, unresolved motion around an established pitch is not
+  // evidence for a second adjacent note. A fresh attack starts a new epoch.
+  for(int n=0;n<notes;++n)if(candidateAmp[n]>0&&!held[n])for(int other=std::max(0,n-1);other<=std::min(notes-1,n+1);++other)
+   if(other!=n&&referenceEpoch[other]==attackEpoch&&heldHz[other]>0&&std::abs(candidateHz[n]-heldHz[other])<rate/N*1.2){candidateAmp[n]=0;streak[n]=0;break;}
   for(int n=0;n<notes;++n){
    // Three agreements in six frames tolerate a weak string being briefly masked.
    streak[n]=((streak[n]<<1)|(candidateAmp[n]>0?1:0))&63;

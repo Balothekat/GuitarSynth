@@ -17,7 +17,6 @@ jobs:
           g++ -std=c++17 -O3 -pthread Source/CalibratedWorkerTest.cpp -o worker_test
           ./worker_test
   replay-tool:
-    needs: synthetic
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
@@ -27,9 +26,9 @@ jobs:
           clang++ -std=c++17 -O3 -mmacosx-version-min=14.0 Source/CalibratedTest.cpp -o calibrated_test
           codesign --force --sign - calibrated_replay
           codesign --verify --strict calibrated_replay
-      - name: Verify no synthetic open-string harmonics become extra MIDI notes
-        run: ./calibrated_test
       - uses: actions/upload-artifact@v4
         with:
           name: Calibrated-Replay-Mac
           path: calibrated_replay
+      - name: Verify native synthetic strings and mixture
+        run: ./calibrated_test
