@@ -50,7 +50,7 @@ private:
  std::array<int,N> bitReverse{};
  std::array<double,N/2+1> magnitude{};
  std::array<Tone,24> tones{};
- std::array<Candidate,24> candidates{},accepted{};
+ std::array<Candidate,180> candidates{},accepted{};
  Strengths strength{};
  std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{},heldHz{};
  std::array<int,notes> streak{},absence{};
@@ -69,10 +69,10 @@ private:
     real[right]=real[left]-vr;imaginary[right]=imaginary[left]-vi;real[left]+=vr;imaginary[left]+=vi;}}
   for(int k=0;k<=N/2;++k)magnitude[k]=real[k]*real[k]+imaginary[k]*imaginary[k];
  }
- Tone fit(double hz)const {
+ Tone fit(double hz,bool useOriginal=false)const {
   double angle=2*pi*hz/rate,cr=std::cos(angle),ci=std::sin(angle),c=1,s=0;
   double cc=0,ss=0,cs=0,xc=0,xs=0;
-  for(int i=0;i<N;++i){double w=window[i],v=residual[i];cc+=w*c*c;ss+=w*s*s;cs+=w*c*s;xc+=w*v*c;xs+=w*v*s;
+  for(int i=0;i<N;++i){double w=window[i],v=useOriginal?original[i]:residual[i];cc+=w*c*c;ss+=w*s*s;cs+=w*c*s;xc+=w*v*c;xs+=w*v*s;
    double next=c*cr-s*ci;s=s*cr+c*ci;c=next;}
   double den=cc*ss-cs*cs;if(std::abs(den)<1e-12)return {hz,0,0};
   return {hz,(xc*ss-xs*cs)/den,(xs*cc-xc*cs)/den};
@@ -106,26 +106,30 @@ private:
   noiseRatio=after/(before+1e-12);if(noiseRatio>=0.15)return;
   for(int j=0;j<toneCount;++j)peak=std::max(peak,tones[j].amplitude());
   recentPeak=std::max(peak,recentPeak);
-  int count=0;
-  for(int j=0;j<toneCount;++j){const auto& t=tones[j];if(t.hz<68||t.hz>1500)continue;Candidate c;
-   if(!map(t.hz,c))continue;c.amp=t.amplitude();
-   // A decaying/muted chord must not keep enrolling fresh notes from its tail.
-   // This measured mode enrolls notes during a strum; it is not a legato mode.
-   if(!held[c.note-first]&&attackAge>0.45)continue;
-   double minimum=held[c.note-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
-   if(c.amp<=minimum)continue;
-   // Even a temporarily masked lower fundamental can explain an upper partial.
-   bool explained=false;
-   for(int k=0;k<toneCount&&!explained;++k){const auto& lower=tones[k];if(lower.hz>=t.hz*0.75||lower.amplitude()<peak*0.045)continue;Candidate lowerMap;
-    if(!map(lower.hz,lowerMap))continue;
-    for(int h=1;h<12;++h){auto part=GuitarProfile::partials[lowerMap.string][h];double target=lower.hz*part.ratio;
-     if(std::abs(std::log2(t.hz/target))<0.04&&c.amp<lower.amplitude()*(std::max(1.0,part.amplitude*2.5)+0.15)){explained=true;break;}}}
-   if(explained)continue;
-   // A new guitar note needs corroborating partials, not just a pick/mute peak.
-   bool supported=held[c.note-first]||(c.note<=64&&c.amp>peak*0.22);
-   for(int h=1;h<=3&&!supported;++h){auto partial=GuitarProfile::partials[c.string][h];double expected=t.hz*partial.ratio;
-    for(int k=0;k<toneCount;++k)if(k!=j&&tones[k].amplitude()>c.amp*0.075&&std::abs(std::log2(tones[k].hz/expected))<0.018){supported=true;break;}}
-   if(supported)candidates[count++]=c;}
+  int count=0;std::array<Candidate,notes> bestByNote{};
+  // Infer fundamentals from two agreeing, calibrated upper partials. A quiet
+  // fundamental need not be an isolated FFT peak between louder neighboring strings.
+  for(int string=0;string<6;++string)for(int fret=0;fret<=24;++fret){
+   int key=GuitarProfile::openNotes[string]+fret;if(key<first||key>last)continue;
+   if(!held[key-first]&&attackAge>0.45)continue;
+   double centre=GuitarProfile::openHz[string]*std::pow(2.0,fret/12.0);
+   std::array<double,5> estimates{},weights{};int matches=0;
+   for(int h=1;h<=5;++h){auto part=GuitarProfile::partials[string][h];double target=centre*part.ratio,largest=0,frequency=0;
+    double low=target*0.976,high=target*1.025;
+    for(int k=0;k<toneCount;++k){double amplitude=tones[k].amplitude();if(tones[k].hz>low&&tones[k].hz<high&&amplitude>peak*0.035&&amplitude>largest){largest=amplitude;frequency=tones[k].hz;}}
+    if(frequency>0){estimates[matches]=frequency/part.ratio;weights[matches]=largest/std::max(0.1,part.amplitude);++matches;}
+   }
+   double chosen=0,bestWeight=0;
+   for(int seed=0;seed<matches;++seed){int agreements=0;double weighted=0,total=0;
+    for(int j=0;j<matches;++j)if(std::abs(std::log2(estimates[j]/estimates[seed]))<0.02){++agreements;weighted+=estimates[j]*weights[j];total+=weights[j];}
+    if(agreements>=2&&total>bestWeight){bestWeight=total;chosen=weighted/total;}
+   }
+   if(chosen==0||std::abs(12*std::log2(chosen/centre))>=0.32)continue;
+   double amplitude=fit(chosen,true).amplitude();double minimum=held[key-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
+   if(amplitude<=minimum)continue;Candidate c{chosen,amplitude,key,string};
+   if(c.amp>bestByNote[key-first].amp)bestByNote[key-first]=c;
+  }
+  for(const auto& c:bestByNote)if(c.amp>0)candidates[count++]=c;
   std::sort(candidates.begin(),candidates.begin()+count,[](const auto& a,const auto& b){return a.hz<b.hz;});
   int kept=0;
   for(int j=0;j<count;++j){auto c=candidates[j];bool harmonic=false,duplicate=false;
