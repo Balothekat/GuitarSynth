@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
 
 // Experimental calibrated fundamental tracker. Does not infer missing octave
 // duplicates: an octave can be indistinguishable from a lower string's partial.
@@ -14,7 +13,9 @@ public:
  using Strengths=std::array<float,notes>;
  void prepare(double sr) {
   divisor=std::max(1,(int)std::ceil(sr/24000.0));rate=sr/divisor;
-  for(int i=0;i<N;++i)window[i]=0.5-0.5*std::cos(2*pi*i/(N-1));
+  for(int i=0;i<N;++i){window[i]=0.5-0.5*std::cos(2*pi*i/(N-1));
+   twiddleRe[i]=std::cos(-2*pi*i/N);twiddleIm[i]=std::sin(-2*pi*i/N);
+   int value=i,reversed=0;for(int bit=N;bit>1;bit>>=1){reversed=(reversed<<1)|(value&1);value>>=1;}bitReverse[i]=reversed;}
   reset();
  }
  void reset() {
@@ -38,9 +39,10 @@ private:
  struct Tone {double hz=0,a=0,b=0;double amplitude()const{return std::hypot(a,b);}};
  struct Candidate {double hz=0,amp=0;int note=0,string=0;};
  std::array<double,N> ring{},window{},original{},residual{};
- std::array<std::complex<double>,N> fft{};
+ std::array<double,N> real{},imaginary{},twiddleRe{},twiddleIm{};
+ std::array<int,N> bitReverse{};
  std::array<double,N/2+1> magnitude{};
- std::array<Tone,24> tones{};
+ std::array<Tone,16> tones{};
  std::array<Candidate,24> candidates{},accepted{};
  Strengths strength{};
  std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{};
@@ -51,11 +53,12 @@ private:
  float envelope=0;
 
  void spectrum() {
-  for(int i=0;i<N;++i)fft[i]={residual[i]*window[i],0};
-  for(int i=1,j=0;i<N;++i){int bit=N>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;if(i<j)std::swap(fft[i],fft[j]);}
-  for(int length=2;length<=N;length<<=1){double angle=-2*pi/length;std::complex<double> step(std::cos(angle),std::sin(angle));
-   for(int i=0;i<N;i+=length){std::complex<double> w(1,0);for(int j=0;j<length/2;++j){auto u=fft[i+j],v=fft[i+j+length/2]*w;fft[i+j]=u+v;fft[i+j+length/2]=u-v;w*=step;}}}
-  for(int k=0;k<=N/2;++k)magnitude[k]=std::abs(fft[k]);
+  for(int i=0;i<N;++i){int j=bitReverse[i];real[j]=residual[i]*window[i];imaginary[j]=0;}
+  for(int length=2;length<=N;length<<=1){int stride=N/length;
+   for(int i=0;i<N;i+=length)for(int j=0;j<length/2;++j){int left=i+j,right=left+length/2,tw=j*stride;
+    double wr=twiddleRe[tw],wi=twiddleIm[tw],vr=real[right]*wr-imaginary[right]*wi,vi=real[right]*wi+imaginary[right]*wr;
+    real[right]=real[left]-vr;imaginary[right]=imaginary[left]-vi;real[left]+=vr;imaginary[left]+=vi;}}
+  for(int k=0;k<=N/2;++k)magnitude[k]=real[k]*real[k]+imaginary[k]*imaginary[k];
  }
  Tone fit(double hz)const {
   double angle=2*pi*hz/rate,cr=std::cos(angle),ci=std::sin(angle),c=1,s=0;
@@ -85,7 +88,7 @@ private:
     double f=(k+delta)*rate/N;if(f<=60||f>=5000)continue;
     bool nearby=false;for(int j=0;j<toneCount;++j)nearby|=std::abs(f-tones[j].hz)<rate/N*0.7;
     if(!nearby&&v>best){best=v;hz=f;}}
-   if(n==0)initial=best;if(hz==0||best<initial*0.03)break;
+   if(n==0)initial=best;if(hz==0||best<initial*0.0009)break;
    tones[toneCount]=fit(hz);apply(tones[toneCount],-1);++toneCount;
   }
   for(int pass=0;pass<3;++pass)for(int j=0;j<toneCount;++j){apply(tones[j],1);tones[j]=fit(tones[j].hz);apply(tones[j],-1);}
