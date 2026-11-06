@@ -1,0 +1,2 @@
+# 0.2
+Custom original cream-and-sage editor with live input level, input waveform, pitch history and passive note display. Parameter-bound gain, gate, dry/synth levels, harmonics, oscillator selection, ADSR, bend and mute controls. Sine, warm and hollow additive synthesis. Monophonic tracker unchanged. No sampler, chord tracking or effects rack. Minimum macOS 14.0. GUI snapshot and synthetic tracking tests run in GitHub Actions.

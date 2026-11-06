@@ -1,18 +1,30 @@
 #include <JuceHeader.h>
 #include "Tracker.h"
 
+class GuitarLinkEditor;
 class GuitarLink final : public juce::AudioProcessor {
 public:
  GuitarLink():AudioProcessor(BusesProperties()
   .withInput("Guitar",juce::AudioChannelSet::stereo(),true)
   .withOutput("Output",juce::AudioChannelSet::stereo(),true)),
-  params(*this,nullptr,"GuitarLink",layout()) {}
+  params(*this,nullptr,"GuitarLink",layout()) {for(auto& v:scope)v.store(0); }
+ juce::AudioProcessorValueTreeState& state(){return params;}
+ std::atomic<float> inputLevel{0}, livePitch{-1}, envelopeLevel{0};
+ std::array<std::atomic<float>,256> scope{};
+ std::atomic<unsigned> scopeIndex{0};
  static juce::AudioProcessorValueTreeState::ParameterLayout layout() {
   juce::AudioProcessorValueTreeState::ParameterLayout p;
   auto add=[&](const char* id,const char* name,float lo,float hi,float def) {
    p.add(std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id,1},name,
     juce::NormalisableRange<float>(lo,hi),def));
   };
+  add("gain","Input gain",0.1f,4,1);
+  add("attack","Attack",0.001f,1,0.005f);
+  add("decay","Decay",0.005f,1,0.15f);
+  add("sustain","Sustain",0,1,0.75f);
+  add("tone","Harmonics",0,1,0.25f);
+  p.add(std::make_unique<juce::AudioParameterChoice>(juce::ParameterID{"wave",1},
+    "Oscillator",juce::StringArray{"Sine","Warm","Hollow"},1));
   add("gate","Input gate",0.001f,0.1f,0.008f);
   add("dry","Dry guitar",0,1,0);
   add("synth","Test synth volume",0,1,0.5f);
@@ -29,12 +41,12 @@ public:
  bool isMidiEffect() const override{return false;}
  double getTailLengthSeconds() const override{return 0.5;}
  bool hasEditor() const override{return true;}
- juce::AudioProcessorEditor* createEditor() override {
-  return new juce::GenericAudioProcessorEditor(*this);
- }
+ juce::AudioProcessorEditor* createEditor() override;
  void prepareToPlay(double sr,int) override {
   rate=sr;tracker.prepare(sr);note=-1;candidate=-1;stable=miss=0;
   phase=env=frequency=0;lastWheel=8192;resetPending=true;
+  adsr.setSampleRate(sr);adsr.reset();envelopeNote=-1;scopeCounter=0;
+  inputLevel.store(0);livePitch.store(-1);envelopeLevel.store(0);
  }
  void releaseResources() override {}
  bool isBusesLayoutSupported(const BusesLayout& b) const override {
@@ -56,18 +68,31 @@ public:
   const float dry=*params.getRawParameterValue("dry");
   const float synth=*params.getRawParameterValue("synth");
   const double release=*params.getRawParameterValue("release");
+  const float gain=*params.getRawParameterValue("gain");
+  const float tone=*params.getRawParameterValue("tone");
+  const int wave=juce::roundToInt(*params.getRawParameterValue("wave"));
+  juce::ADSR::Parameters shape;
+  shape.attack=*params.getRawParameterValue("attack");
+  shape.decay=*params.getRawParameterValue("decay");
+  shape.sustain=*params.getRawParameterValue("sustain");
+  shape.release=(float)release;adsr.setParameters(shape);
   const bool bend=*params.getRawParameterValue("bend")>0.5f;
   const bool panic=*params.getRawParameterValue("panic")>0.5f;
   if(resetPending||panic) {
    stop(midi,0);midi.addEvent(juce::MidiMessage::allNotesOff(1),0);
    resetPending=false;
   }
-  const double releaseCoeff=1-std::exp(-1/(rate*release));
-  const double attackCoeff=1-std::exp(-1/(rate*0.002));
+
   for(int i=0;i<count;++i) {
    // Select Scarlett's guitar input in Live's track input selector.
    float x=audio.getSample(0,i);
    if(getTotalNumInputChannels()==2)x=0.5f*(x+audio.getSample(1,i));
+   x*=gain;
+   if(++scopeCounter>=64) {
+    scopeCounter=0;auto pos=scopeIndex.load(std::memory_order_relaxed);
+    scope[pos%256].store(x,std::memory_order_relaxed);
+    scopeIndex.store(pos+1,std::memory_order_relaxed);
+   }
    double hz=0;
    if(tracker.push(x,gate,hz)&&!panic) {
     if(hz<=0) {
@@ -101,16 +126,29 @@ public:
     }
    }
    bool active=note>=0&&!panic;
-   env+=((active?1.0:0.0)-env)*(active?attackCoeff:releaseCoeff);
+   if(active && note!=envelopeNote){adsr.noteOn();envelopeNote=note;}
+   if(!active && envelopeNote>=0){adsr.noteOff();envelopeNote=-1;}
+   env=adsr.getNextSample();
    phase+=frequency/rate;phase-=std::floor(phase);
-   float output=panic?0.0f:dry*x+synth*0.22f*(float)(env*
-    (std::sin(phase*juce::MathConstants<double>::twoPi)
-     +0.2*std::sin(phase*juce::MathConstants<double>::twoPi*2)));
+   double oscillator=std::sin(phase*juce::MathConstants<double>::twoPi);
+   if(wave>0) {
+    for(int harmonic=2;harmonic<=8;++harmonic) {
+     if(frequency*harmonic>rate*0.45)break;
+     if(wave==2 && harmonic%2==0)continue;
+     oscillator+=tone*std::sin(phase*juce::MathConstants<double>::twoPi*harmonic)
+       /(harmonic*harmonic);
+    }
+   }
+   float output=panic?0.0f:dry*x+synth*0.22f*(float)(env*oscillator);
    for(int ch=0;ch<audio.getNumChannels();++ch)audio.setSample(ch,i,output);
   }
+  inputLevel.store(tracker.level(),std::memory_order_relaxed);
+  livePitch.store(note>=0&&!panic&&frequency>0?(float)(69+12*std::log2(frequency/440.0)):-1,
+    std::memory_order_relaxed);
+  envelopeLevel.store((float)env,std::memory_order_relaxed);
  }
  void processBlockBypassed(juce::AudioBuffer<float>&,juce::MidiBuffer& midi) override {
-  midi.clear(); stop(midi,0); resetPending=true;
+  midi.clear(); stop(midi,0); resetPending=true;adsr.reset();envelopeNote=-1;livePitch.store(-1);
  }
  int getNumPrograms() override{return 1;}
  int getCurrentProgram() override{return 0;}
@@ -127,8 +165,12 @@ public:
 private:
  juce::AudioProcessorValueTreeState params;
  Tracker tracker;
+ juce::ADSR adsr;
+ int envelopeNote=-1,scopeCounter=0;
  double rate=48000,phase=0,env=0,frequency=0;
  int note=-1,candidate=-1,stable=0,miss=0,lastWheel=8192;
  bool resetPending=true;
 };
+#include "Editor.h"
+juce::AudioProcessorEditor* GuitarLink::createEditor(){return new GuitarLinkEditor(*this);}
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter(){return new GuitarLink();}

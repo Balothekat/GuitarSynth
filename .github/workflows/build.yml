@@ -22,12 +22,18 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$BUNDLE/Contents/Info.plist")" = "14.0"
           xcrun vtool -show-build "$BUNDLE/Contents/MacOS/GuitarLink"
           codesign --verify --deep --strict "$BUNDLE"
+      - name: Render actual plugin interface
+        run: '"build/UiPreview_artefacts/Release/GuitarLink Preview.app/Contents/MacOS/GuitarLink Preview" "$PWD/ui-preview.png"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GuitarLink-UI-Preview
+          path: ui-preview.png
       - name: Package
         run: |
           mkdir -p dist
           ditto "build/GuitarLink_artefacts/Release/VST3/GuitarLink.vst3" "dist/GuitarLink.vst3"
-          ditto -c -k --sequesterRsrc --keepParent dist GuitarLink-macOS14.zip
+          ditto -c -k --sequesterRsrc --keepParent dist GuitarLink-0.2-macOS14.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: GuitarLink-macOS14
-          path: GuitarLink-macOS14.zip
+          name: GuitarLink-0.2-macOS14
+          path: GuitarLink-0.2-macOS14.zip
