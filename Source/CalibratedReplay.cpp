@@ -23,6 +23,11 @@ int main(int argc,char** argv){
  bool realtime=argc==3&&std::string(argv[2])=="--realtime";
  if(argc==3&&!realtime)return 8;
  if(realtime){
+#if defined(__APPLE__)
+  // Approximate the host audio feeder priority; do not inherit a background
+  // terminal launcher's QoS while trying to deliver 128-sample deadlines.
+  pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE,0);
+#endif
   CalibratedWorker worker;worker.setGate(0.008f);worker.start(sr);
   std::array<bool,CalibratedTracker::notes> active{};std::array<int,CalibratedTracker::notes> starts{};
   const auto begin=std::chrono::steady_clock::now();int lateBlocks=0;double maximumLateness=0;

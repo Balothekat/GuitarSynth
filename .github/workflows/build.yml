@@ -16,7 +16,7 @@ jobs:
           ./chord_test
   build:
     needs: core
-    runs-on: macos-15
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - name: Configure universal plugin for macOS 14

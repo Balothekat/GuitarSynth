@@ -1,52 +1,26 @@
-# GuitarLink 0.1 — experimental live guitar to MIDI
-Original JUCE/C++ prototype inspired by the requested guitar-controller workflow.
-Not affiliated with Nudist Audio. No GuitarCatcher code, assets, or algorithms used.
+# GuitarLink 0.4
+Experimental guitar-to-MIDI VST3 and test synth for macOS 14 or newer, Intel and Apple Silicon. Built on GitHub; development tools are not needed on the player's Mac. Original code and interface; not affiliated with GuitarCatcher or Nudist Audio.
 
-STATUS: source only. Not compiled, not validated in Ableton, no measured latency.
-No finished VST3 is included. Generic parameter editor, not the pictured UI.
-Monophonic only; no chord recognition, sampler, effects rack, or MPE.
+## Install and route in Ableton
+1. Quit Live. Extract the release ZIP and replace GuitarLink.vst3 in your existing VST3 scan folder, commonly ~/Library/Audio/Plug-Ins/VST3/.
+2. Restart Live and rescan VST3 plug-ins. Load GuitarLink on an audio track receiving a clean, mono guitar DI before effects.
+3. Select a tracking mode at the top of the plug-in. Use the built-in synth to check input, then route a MIDI track's MIDI From to the GuitarLink audio track and its GuitarLink output; set monitoring to In and load your synth there.
+4. Turn GuitarLink's Dry and Synth levels down when using an external synth. Use Mute / stop all notes before changing routes.
 
-## What is implemented
-Streaming pitch estimation; amplitude-derived MIDI velocity; optional +/-2-semitone
-channel pitch bend; built-in sine/harmonic test synth; dry mix; gate; note-off after
-several missing estimates; mute/panic toggle; mono/stereo input support.
-The tracker uses fixed-size storage and performs no heap allocation.
-JUCE MIDI event insertion may allocate; hard real-time suitability is unverified.
+macOS may require approval for this ad-hoc signed test build. It is not notarized. Do not disable system security globally. Avoid loading duplicate copies of the same VST3 from multiple scan folders.
 
-## Latency
-Zero latency is not achievable. A low E period is about 12.1 ms.
-Detection uses past samples and typically needs several periods. The exact onset delay,
-CPU cost, false-note rate, audio interface delay and synth response are UNMEASURED.
-There is no explicit audio lookahead or delayed dry-audio buffer.
-Start with 48 kHz and a 64/128 sample interface buffer and test for dropouts.
-These are starting settings, not a latency guarantee.
+## Tracking modes
+- Fast Lead: single-note live playing with the shortest analysis path.
+- Stable Lead: single-note playing with more smoothing.
+- Chords (experimental): older general-purpose chord prototype.
+- DAEAC#E / measured: new strum-oriented accuracy mode calibrated from six open-string recordings in D–A–E–A–C♯–E tuning. See CALIBRATED-MODE.md.
 
-## Build without installing development tools on your Mac
-Upload the CONTENTS of this project to a GitHub repository, including .github.
-The workflow compiles on GitHub's Mac runner and runs synthetic checks.
-Download the GuitarLink-Mac artifact and extract the ZIP inside it.
-You still need working GitHub repository access; this workflow has not been run.
-CMake and Apple tools are required on the build runner, not on your Mac.
+The measured mode is specific to the recorded guitar and its actual string pitches. It identifies supported fundamentals and suppresses harmonics instead of guessing all six sounding strings. Octave duplicates may be omitted. New tones need an attack; legato, hammer-ons and bends are not reliable. Fast Lead remains preferable for latency-sensitive single notes.
 
-## After a successful build
-Copy GuitarLink.vst3 into ~/Library/Audio/Plug-Ins/VST3/ and rescan Live.
-Load on an audio track receiving your clean guitar DI, before distortion/reverb.
-Use a mono input selector for Scarlett's guitar channel. Begin with the built-in synth.
-For external instruments, route the plugin's MIDI output to a MIDI track if supported
-by your Live version/plugin configuration. That routing has not been verified here.
-Set receiver pitch bend range to +/-2 semitones. Turn pitch bend OFF for discrete
-note articulation: with bend ON, movements under two semitones retain the base note.
-If tracking jitters, raise the gate and check the DI level. Avoid clipping.
-Mute / stop all notes silences audio and emits note-offs while enabled.
-Release the toggle to resume. Disable before changing MIDI routing.
-Disabling/removing the device while notes are held can still require your synth's panic.
+## Latency and limits
+Zero latency is not achievable. The measured mode uses a roughly 85–93 ms analysis window plus confirmation and asynchronous processing; interface buffers and the receiving synth add further delay. Lowering Ableton's buffer cannot remove the detector's own delay. Try 128 samples, then 64 if your system plays without dropouts. Measured-mode accuracy and CPU have limited recorded-guitar coverage and are not established for arbitrary chords or guitars.
 
-## Known limitations / next engineering work
-Picking the same pitch again during a sustained note does not retrigger MIDI.
-Smooth bends and adjacent newly picked notes are ambiguous in bend mode.
-No polyphony; overlapping strings and distorted signals can yield octave errors.
-Averaging downsampling is a prototype filter, not a high-quality antialiasing stage.
-Only synthetic steady-tone/silence tests are included. Recorded DI, note transitions,
-onset/offset timing, bend trajectories, MIDI lifecycle and CPU need validation.
-A custom keyboard/tracking display and sampler UI remain future work.
-JUCE is a third-party dependency; review its license before distribution.
+The plug-in includes a small six-voice test synth, ADSR, dry/synth mix, gate, lead pitch bend, keyboard and pitch display. No sampler, MPE or effects rack. It is a prototype, not equivalent to a mature commercial polyphonic guitar tracker. No original guitar recordings are stored in this repository.
+
+## Build and verification
+The GitHub workflow builds JUCE 8.0.10 with CMake/Xcode on its Mac runner, runs core/string/chord/worker tests and full processor MIDI/synth checks, renders the actual editor, and checks signing and macOS 14 compatibility. The calibration workflow also builds a standalone local AIFF replay tool, including a paced worker mode. Passing tests does not imply Ableton host validation. Review JUCE's license before distribution.
