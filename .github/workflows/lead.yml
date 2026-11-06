@@ -1,0 +1,30 @@
+name: Test measured lead
+on:
+  push:
+    branches: [measured-lead]
+permissions:
+  contents: read
+jobs:
+  lead-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify strings, frets, transitions and tail harmonics
+        run: |
+          g++ -std=c++17 -O3 Source/MeasuredLeadTest.cpp -o lead_test
+          ./lead_test
+  replay-tool:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build native replay tool and tests
+        run: |
+          clang++ -std=c++17 -O3 -mmacosx-version-min=14.0 -arch x86_64 -arch arm64 Source/MeasuredLeadReplay.cpp -o measured_lead_replay
+          clang++ -std=c++17 -O3 -mmacosx-version-min=14.0 Source/MeasuredLeadTest.cpp -o lead_test
+          codesign --force --sign - measured_lead_replay
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Measured-Lead-Replay-Mac
+          path: measured_lead_replay
+      - name: Verify native measured lead
+        run: ./lead_test
