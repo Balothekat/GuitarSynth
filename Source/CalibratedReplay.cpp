@@ -22,11 +22,11 @@ int main(int argc,char** argv){
  if(sr<8000||sr>192000||!start||bytes/3<frames)return 7;
  CalibratedTracker detector;detector.prepare(sr);std::array<bool,CalibratedTracker::notes> held{};std::array<int,CalibratedTracker::notes> onsets{},counts{};
  double maximumMs=0,totalMs=0;int analyses=0;
- std::cout<<"sample_rate,"<<sr<<"\nduration,"<<frames/sr<<"\ntime,event,midi\n";
+ std::cout<<"sample_rate,"<<sr<<"\nduration,"<<frames/sr<<"\ntime,event,midi,noise_ratio,input_level\n";
  for(uint32_t i=0;i<frames;++i){const auto* p=b.data()+start+i*3;int32_t word=(int32_t(p[0])<<16)|(int32_t(p[1])<<8)|p[2];if(word&0x800000)word-=0x1000000;float x=word/8388608.0f;
   auto begin=std::chrono::steady_clock::now();bool ready=detector.push(x,0.008f);
   if(ready){double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();maximumMs=std::max(maximumMs,ms);totalMs+=ms;++analyses;
-   const auto& levels=detector.getStrengths();for(int n=0;n<CalibratedTracker::notes;++n){bool active=levels[n]>0;if(active)++counts[n];if(active!=held[n]){std::cout<<i/sr<<','<<(active?"on":"off")<<','<<n+CalibratedTracker::first<<'\n';if(active)++onsets[n];held[n]=active;}}
+   const auto& levels=detector.getStrengths();for(int n=0;n<CalibratedTracker::notes;++n){bool active=levels[n]>0;if(active)++counts[n];if(active!=held[n]){std::cout<<i/sr<<','<<(active?"on":"off")<<','<<n+CalibratedTracker::first<<','<<detector.getNoiseRatio()<<','<<detector.level()<<'\n';if(active)++onsets[n];held[n]=active;}}
   }
  }
  std::cout<<"ANALYSIS_MEAN_MS,"<<totalMs/std::max(1,analyses)<<"\nANALYSIS_MAX_MS,"<<maximumMs<<"\n";

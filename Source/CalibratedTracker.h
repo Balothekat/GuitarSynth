@@ -6,10 +6,10 @@
 
 // Experimental calibrated fundamental tracker. Does not infer missing octave
 // duplicates: an octave can be indistinguishable from a lower string's partial.
-// All storage is allocated with the object; no audio or calibration is uploaded.
+// All storage is allocated with the object; no audio is uploaded by the detector.
 class CalibratedTracker {
 public:
- static constexpr int first=38,last=88,notes=last-first+1,N=2048,hopSize=256;
+ static constexpr int first=38,last=88,notes=last-first+1,N=2048,hopSize=512;
  using Strengths=std::array<float,notes>;
  void prepare(double sr) {
   divisor=std::max(1,(int)std::ceil(sr/24000.0));rate=sr/divisor;
@@ -98,7 +98,13 @@ private:
   for(int j=0;j<toneCount;++j)peak=std::max(peak,tones[j].amplitude());
   int count=0;
   for(int j=0;j<toneCount;++j){const auto& t=tones[j];if(t.hz<68||t.hz>1500)continue;Candidate c;
-   if(!map(t.hz,c))continue;c.amp=t.amplitude();if(c.amp>peak*(held[c.note-first]?0.045:0.14))candidates[count++]=c;}
+   if(!map(t.hz,c))continue;c.amp=t.amplitude();
+   if(c.amp<=peak*(held[c.note-first]?0.045:0.14))continue;
+   // A new guitar note needs corroborating partials, not just a pick/mute peak.
+   bool supported=held[c.note-first];
+   for(int h=1;h<=3&&!supported;++h){auto partial=GuitarProfile::partials[c.string][h];double expected=t.hz*partial.ratio;
+    for(int k=0;k<toneCount;++k)if(k!=j&&tones[k].amplitude()>c.amp*0.075&&std::abs(std::log2(tones[k].hz/expected))<0.018){supported=true;break;}}
+   if(supported)candidates[count++]=c;}
   std::sort(candidates.begin(),candidates.begin()+count,[](const auto& a,const auto& b){return a.hz<b.hz;});
   int kept=0;
   for(int j=0;j<count;++j){auto c=candidates[j];bool harmonic=false,duplicate=false;

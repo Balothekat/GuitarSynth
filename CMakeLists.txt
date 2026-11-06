@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum supported macOS")
-project(GuitarLink VERSION 0.3.0)
+project(GuitarLink VERSION 0.4.0)
 set(CMAKE_CXX_STANDARD 17)
 include(FetchContent)
 FetchContent_Declare(JUCE GIT_REPOSITORY https://github.com/juce-framework/JUCE.git GIT_TAG 8.0.10 GIT_SHALLOW TRUE)
@@ -25,3 +25,10 @@ target_link_libraries(UiPreview PRIVATE GuitarLink juce::juce_audio_utils)
 
 add_executable(chord_test Source/ChordTest.cpp)
 add_test(NAME chords_and_timing COMMAND chord_test)
+
+add_executable(calibrated_test Source/CalibratedTest.cpp)
+add_test(NAME calibrated_strings COMMAND calibrated_test)
+add_executable(calibrated_worker_test Source/CalibratedWorkerTest.cpp)
+find_package(Threads REQUIRED)
+target_link_libraries(calibrated_worker_test PRIVATE Threads::Threads)
+add_test(NAME calibrated_worker COMMAND calibrated_worker_test)

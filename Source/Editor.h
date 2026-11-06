@@ -58,7 +58,8 @@ public:
    names[i].setFont(juce::Font(11.0f));
   }
   addAndMakeVisible(tracking);tracking.setName("Tracking mode");
-  tracking.addItemList({"Fast Lead","Stable Lead","Chords (experimental)"},1);
+  tracking.addItemList({"Fast Lead","Stable Lead","Chords (experimental)","DAEAC#E / measured"},1);
+  tracking.setTooltip("Measured mode uses your recorded D-A-E-A-C#-E profile. Accuracy mode: slower than lead; may omit octave duplicates.");
   trackingAttachment=std::make_unique<CA>(p.state(),"tracking",tracking);
   addAndMakeVisible(waves);waves.setName("Oscillator");
   waves.addItemList({"Sine","Warm","Hollow"},1);
@@ -89,7 +90,7 @@ public:
   g.fillAll(paper);g.setColour(ink);g.setFont(juce::Font(34.0f,juce::Font::bold));
   g.drawText("GuitarLink",30,18,300,48,juce::Justification::centredLeft);
   text(g,"LIVE GUITAR / MIDI + SYNTH",340,30,245,24,12);
-  text(g,"03",842,26,45,30,20);
+  text(g,"04",842,26,45,30,20);
   line(g,24,82,896,82);line(g,24,274,896,274);line(g,24,434,896,434);
   text(g,"TRACKER",36,94,120,22,12);
   float pitch=p.livePitch.load(std::memory_order_relaxed);
@@ -109,7 +110,7 @@ public:
   drawTracker(g);
   text(g,"OSCILLATOR",654,296,226,20,12);
   int mode=tracking.getSelectedId();
-  text(g,mode==3?"Experimental / up to 6 notes":mode==1?"Fast single-note response":"Stable single-note response",654,373,226,20,12);
+  text(g,mode==4?(p.trackingBusy.load()?"Tracking busy / accuracy mode":"Measured tuning / chord tones"):mode==3?"Experimental / up to 6 notes":mode==1?"Fast single-note response":"Stable single-note response",654,373,226,20,12);
   text(g,"Clean DI gives the clearest result",654,396,226,18,11);
   text(g,"INPUT WAVEFORM",36,450,340,24,12);
   drawScope(g);
@@ -129,7 +130,7 @@ private:
  juce::TooltipWindow tips{this,700};
  std::array<float,180> history{};
  int head=0;
- void timerCallback() override {bend.setEnabled(tracking.getSelectedId()!=3);history[head]=p.livePitch.load(std::memory_order_relaxed);
+ void timerCallback() override {bend.setEnabled(tracking.getSelectedId()<3);history[head]=p.livePitch.load(std::memory_order_relaxed);
   head=(head+1)%180;repaint();}
  void text(juce::Graphics& g,const juce::String& s,int x,int y,int w,int h,float font){
   g.setColour(ink);g.setFont(juce::Font(font));g.drawText(s,x,y,w,h,juce::Justification::centredLeft);
