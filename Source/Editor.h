@@ -40,6 +40,18 @@ public:
    knobs[i].setTextBoxStyle(juce::Slider::TextBoxBelow,false,80,20);
    knobs[i].setNumDecimalPlacesToDisplay(3);
    attachments[i]=std::make_unique<SA>(p.state(),ids[i],knobs[i]);
+   knobs[i].textFromValueFunction=[i](double v){
+    if(i<2)return juce::String(juce::Decibels::gainToDecibels((float)v),1)+" dB";
+    if(i==5||i==6||i==8)return juce::String(v*1000,0)+" ms";
+    return juce::String(v*100,0)+" %";
+   };
+   knobs[i].valueFromTextFunction=[i](const juce::String& t){
+    double v=t.getDoubleValue();
+    if(i<2)return (double)juce::Decibels::decibelsToGain((float)v);
+    if(i==5||i==6||i==8)return v/1000;
+    return v/100;
+   };
+   knobs[i].updateText();
    addAndMakeVisible(names[i]);names[i].setText(labels[i],juce::dontSendNotification);
    names[i].setJustificationType(juce::Justification::centred);
    names[i].setColour(juce::Label::textColourId,ink);
@@ -131,6 +143,11 @@ private:
    if(!connected)path.startNewSubPath(x,y);else path.lineTo(x,y);connected=true;
   }
   g.setColour(green);g.strokePath(path,juce::PathStrokeType(2));
+  float currentPitch=p.livePitch.load(std::memory_order_relaxed);
+  if(currentPitch>=0) {
+   float dotY=r.getBottom()-juce::jlimit(0.0f,1.0f,(currentPitch-36)/48)*r.getHeight();
+   g.fillEllipse(r.getRight()-7,dotY-3,6,6);
+  }
   // Passive note display: incoming guitar controls this keyboard.
   float live=p.livePitch.load();int current=live<0?-1:juce::roundToInt(live);
   const int whites[]={0,2,4,5,7,9,11};
@@ -142,7 +159,7 @@ private:
     g.setColour(n+1==current?ink:juce::Colour(0xffa8b7a4));g.fillRect(x+10,122.0f,9.0f,62.0f);
    }
   }
-  text(g,"DETECTED NOTES  /  C3 - B4",660,236,222,18,10);
+  text(g,"DETECTED NOTES  /  C2 - B3",660,236,222,18,10);
  }
  void drawScope(juce::Graphics& g) {
   juce::Rectangle<float> r(36,482,350,168);
