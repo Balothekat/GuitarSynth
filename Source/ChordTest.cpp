@@ -6,6 +6,14 @@
 bool chord(double sr,std::vector<int> expected) {
  ChordTracker tracker;tracker.prepare(sr);
  std::array<int,ChordTracker::notes> hits{};
+ std::array<int,ChordTracker::notes> streak{};
+ std::array<bool,ChordTracker::notes> emitted{};
+ auto observe=[&]{
+  for(int n=0;n<ChordTracker::notes;++n) {
+   if(tracker.getStrengths()[n]>0){if(++streak[n]>=2)emitted[n]=true;}
+   else streak[n]=0;
+  }
+ };
  int frames=0;double firstHit=-1;
  auto begin=std::chrono::steady_clock::now();
  for(int i=0;i<(int)(sr*0.35);++i) {
@@ -15,6 +23,7 @@ bool chord(double sr,std::vector<int> expected) {
    for(int h=1;h<=5;++h)x+=0.08/expected.size()*std::sin(6.283185307179586*f*h*i/sr)/std::pow((double)h,1.3);
   }
   if(tracker.push((float)x,0.003f)) {
+   observe();
    bool all=true;for(int note:expected)all&=tracker.getStrengths()[note-ChordTracker::first]>0;
    if(all&&firstHit<0)firstHit=1000.0*i/sr;
    if(i>sr*0.18){++frames;for(int n=0;n<ChordTracker::notes;++n)if(tracker.getStrengths()[n]>0)++hits[n];}
@@ -30,7 +39,11 @@ bool chord(double sr,std::vector<int> expected) {
  }
  std::cout<<"CHORD "<<sr<<" Hz, ";for(int n:expected)std::cout<<n<<",";
  std::cout<<" first complete detection "<<firstHit<<" ms; CPU/audio ratio "<<elapsed/0.35<<"\n";
- for(int i=0;i<(int)(sr*0.2);++i)tracker.push(0,0.003f);
+ for(int i=0;i<(int)(sr*0.2);++i)if(tracker.push(0,0.003f))observe();
+ for(int n=0;n<ChordTracker::notes;++n) {
+  bool wanted=std::find(expected.begin(),expected.end(),n+ChordTracker::first)!=expected.end();
+  if(emitted[n]!=wanted){ok=false;std::cerr<<"Unexpected or missing MIDI candidate "<<n+ChordTracker::first<<"\n";}
+ }
  for(float v:tracker.getStrengths())if(v>0)ok=false;
  return ok;
 }

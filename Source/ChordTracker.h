@@ -34,7 +34,7 @@ public:
  }
  void reset(){ring.fill(0);strength.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;}
  bool push(float x,float gate) {
-  envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.001f);
+  envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.006f);
   sum+=x;if(++sub<divisor)return false;
   ring[index]=(float)(sum/divisor);sum=0;sub=0;
   index=(index+1)%N;filled=std::min(N,filled+1);

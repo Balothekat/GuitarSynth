@@ -1,4 +1,5 @@
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <iostream>
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter();
 class Preview final:public juce::JUCEApplication {
  std::unique_ptr<juce::AudioProcessor> processor;
@@ -56,7 +57,10 @@ public:
   if(!feedChord(true,160)||!feedChord(false,320)) {quit();return;}
   for(int key=0;key<128;++key) {
    bool expected=key==52||key==55||key==59;
-   if(chordOn[key]!=expected || (expected&&!chordOff[key])){setApplicationReturnValue(5);quit();return;}
+   if(chordOn[key]!=expected || (expected&&!chordOff[key])){
+    std::cerr<<"Chord MIDI mismatch key "<<key<<" on "<<chordOn[key]<<" off "<<chordOff[key]<<" expected "<<expected<<"\n";
+    setApplicationReturnValue(5);quit();return;
+   }
   }
   if(audio.getMagnitude(0,128)>0.0001f){setApplicationReturnValue(6);quit();return;}
   if(!feedChord(true,160)){quit();return;}
