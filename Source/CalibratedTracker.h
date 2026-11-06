@@ -166,7 +166,7 @@ private:
   for(int string=0;string<6;++string){double position=12*std::log2(heldHz[n]/GuitarProfile::openHz[string]);int fret=(int)std::round(position);
    if(fret>=0&&fret<=24&&GuitarProfile::openNotes[string]+fret==n+first)errors[string]=std::abs(position-fret);}
   std::sort(order.begin(),order.end(),[&](int a,int b){return errors[a]<errors[b];});
-  for(int string:order)if(!visited[string]&&errors[string]<0.32){visited[string]=true;
+  for(int string:order)if(!visited[string]&&errors[string]<0.55){visited[string]=true;
    if(owners[string]<0||assignString(owners[string],owners,visited)){owners[string]=n;return true;}}
   return false;
  }
