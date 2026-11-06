@@ -37,7 +37,7 @@ public:
   if(best>0.10){miss();return true;}
   int selected=0;
   for(int lag=lowLag;lag<=highLag;++lag)
-   if(scores[lag]<=scores[lag-1]&&scores[lag]<scores[lag+1]&&quality(lag)<=best*1.4+0.0025){selected=lag;break;}
+   if(scores[lag]<=scores[lag-1]&&scores[lag]<scores[lag+1]&&quality(lag)<=best*1.4+0.035){selected=lag;break;}
   if(!selected){miss();return true;}
   double a=scores[selected-1],b=scores[selected],c=scores[selected+1],den=a-2*b+c;
   double delta=den>1e-12?std::clamp(0.5*(a-c)/den,-0.5,0.5):0.0;
