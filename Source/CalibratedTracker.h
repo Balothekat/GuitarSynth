@@ -143,6 +143,10 @@ private:
    if(amplitude<=minimum)continue;Candidate c{chosen,amplitude,key,string};int n=key-first;
    if(bestWeight>refinementQuality[n]){c.amp=std::max(c.amp,bestByNote[n].amp);bestByNote[n]=c;refinementQuality[n]=bestWeight;}
   }
+  // A single unresolved spectral lobe cannot supply two neighboring pitches.
+  // Prefer a calibrated multi-partial estimate over the raw displaced peak.
+  for(int a=0;a<notes;++a)if(bestByNote[a].amp>0)for(int b=a+1;b<notes;++b)if(bestByNote[b].amp>0&&std::abs(bestByNote[a].hz-bestByNote[b].hz)<rate/N*0.8){
+   double qa=refinementQuality[a],qb=refinementQuality[b];int rejected=qa==qb?(bestByNote[a].amp>=bestByNote[b].amp?b:a):(qa>qb?b:a);bestByNote[rejected].amp=0;}
   for(const auto& c:bestByNote)if(c.amp>0)candidates[count++]=c;
   std::sort(candidates.begin(),candidates.begin()+count,[](const auto& a,const auto& b){return a.hz<b.hz;});
   int kept=0;
@@ -154,6 +158,17 @@ private:
   }
   std::sort(accepted.begin(),accepted.begin()+kept,[](const auto& a,const auto& b){return a.amp>b.amp;});
   for(int j=0;j<std::min(6,kept);++j){int n=accepted[j].note-first;candidateAmp[n]=accepted[j].amp;candidateHz[n]=accepted[j].hz;}
+ }
+ bool assignString(int n,std::array<int,6>& owners,std::array<bool,6>& visited)const {
+  // Augment the matching: a strong upper note must not monopolize the only
+  // string available to a lower pitch when it can move to another string.
+  std::array<double,6> errors{};errors.fill(10);std::array<int,6> order{{0,1,2,3,4,5}};
+  for(int string=0;string<6;++string){double position=12*std::log2(heldHz[n]/GuitarProfile::openHz[string]);int fret=(int)std::round(position);
+   if(fret>=0&&fret<=24&&GuitarProfile::openNotes[string]+fret==n+first)errors[string]=std::abs(position-fret);}
+  std::sort(order.begin(),order.end(),[&](int a,int b){return errors[a]<errors[b];});
+  for(int string:order)if(!visited[string]&&errors[string]<0.32){visited[string]=true;
+   if(owners[string]<0||assignString(owners[string],owners,visited)){owners[string]=n;return true;}}
+  return false;
  }
  void update() {
   strength.fill(0);
@@ -178,11 +193,9 @@ private:
   // Find a feasible available string for each pitch, strongest evidence first.
   std::array<int,notes> order{};for(int n=0;n<notes;++n)order[n]=n;
   std::sort(order.begin(),order.end(),[this](int a,int b){return strength[a]>strength[b];});
-  std::array<bool,6> occupied{};
-  for(int n:order)if(strength[n]>0){int selected=-1;double best=0.32;
-   for(int s=0;s<6;++s)if(!occupied[s]){double position=12*std::log2(heldHz[n]/GuitarProfile::openHz[s]);int fret=(int)std::round(position);double error=std::abs(position-fret);
-    if(fret>=0&&fret<=24&&GuitarProfile::openNotes[s]+fret==n+first&&error<best){selected=s;best=error;}}
-   if(selected<0){strength[n]=0;held[n]=false;referenceEpoch[n]=-1;}else occupied[selected]=true;
+  std::array<int,6> owners{};owners.fill(-1);
+  for(int n:order)if(strength[n]>0){std::array<bool,6> visited{};
+   if(!assignString(n,owners,visited)){strength[n]=0;held[n]=false;referenceEpoch[n]=-1;}
   }
   // Release tails cannot expand the active voice set beyond six.
   for(int iteration=0;iteration<notes;++iteration){int count=0,weakest=-1;float lowest=1e30f;
