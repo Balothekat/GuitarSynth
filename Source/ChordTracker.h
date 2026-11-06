@@ -76,8 +76,12 @@ public:
    if(strength[n]<maximum*0.24f||fundamental<peak*0.065f)strength[n]=0;
   }
   // A weak octave explained by an active lower fundamental is usually an overtone.
-  for(int n=12;n<notes;++n)
-   if(strength[n-12]>0 && strength[n]<strength[n-12]*0.85f)strength[n]=0;
+  for(int n=12;n<notes;++n) {
+   int lower=n-12;
+   bool crowded=(lower>0&&strength[lower-1]>0)||(lower+1<notes&&strength[lower+1]>0);
+   float ratio=crowded?0.85f:0.6f;
+   if(strength[lower]>0 && strength[n]<strength[lower]*ratio)strength[n]=0;
+  }
   // Six outputs maximum; no manufactured chord notes.
   for(int count=0;count<notes-6;++count) {
    int selected=-1;float smallest=1e30f;int positives=0;
