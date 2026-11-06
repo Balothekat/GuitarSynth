@@ -37,8 +37,8 @@ int main(int argc,char** argv){
    double late=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-target).count();if(late>3){++lateBlocks;maximumLateness=std::max(maximumLateness,late);}
    std::this_thread::sleep_until(target);
   }
-  bool overloaded=worker.hasOverloaded();worker.stop();
-  std::cout<<"QUEUE_OVERLOADED,"<<overloaded<<"\nLATE_FEED_BLOCKS,"<<lateBlocks<<"\nMAX_FEED_LATENESS_MS,"<<maximumLateness<<'\n';
+  unsigned peakQueued=worker.peakQueuedSamples();bool overloaded=worker.hasOverloaded();worker.stop();
+  std::cout<<"PEAK_QUEUED_AUDIO_MS,"<<peakQueued/sr*1000<<"\nQUEUE_OVERLOADED,"<<overloaded<<"\nLATE_FEED_BLOCKS,"<<lateBlocks<<"\nMAX_FEED_LATENESS_MS,"<<maximumLateness<<'\n';
   for(int n=0;n<CalibratedTracker::notes;++n)if(starts[n])std::cout<<"NOTE,"<<n+CalibratedTracker::first<<",onsets,"<<starts[n]<<'\n';
   return overloaded?9:0;
  }
