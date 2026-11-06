@@ -13,6 +13,7 @@ public:
  using Strengths=std::array<float,notes>;
  void prepare(double sr) {
   divisor=std::max(1,(int)std::ceil(sr/24000.0));rate=sr/divisor;
+  samplePeriod=1/sr;fastCoefficient=1-std::exp(-samplePeriod/0.005);slowCoefficient=1-std::exp(-samplePeriod/0.06);
   for(int i=0;i<N;++i){window[i]=0.5-0.5*std::cos(2*pi*i/(N-1));
    twiddleRe[i]=std::cos(-2*pi*i/N);twiddleIm[i]=std::sin(-2*pi*i/N);
    int value=i,reversed=0;for(int bit=N;bit>1;bit>>=1){reversed=(reversed<<1)|(value&1);value>>=1;}bitReverse[i]=reversed;}
@@ -20,9 +21,13 @@ public:
  }
  void reset() {
   ring.fill(0);strength.fill(0);streak.fill(0);absence.fill(0);held.fill(false);
-  prior.fill(0);lastAmplitude.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;
+  prior.fill(0);lastAmplitude.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;fastEnergy=slowEnergy=0;attackAge=0;
  }
  bool push(float x,float gate) {
+  double square=(double)x*x;fastEnergy+=(square-fastEnergy)*fastCoefficient;
+  slowEnergy+=(square-slowEnergy)*slowCoefficient;
+  attackAge=std::min(2.0,attackAge+samplePeriod);
+  if(attackAge>0.15&&fastEnergy>slowEnergy*2.2&&fastEnergy>gate*gate)attackAge=0;
   envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.003f);
   sum+=x;if(++sub<divisor)return false;
   ring[index]=sum/divisor;sum=0;sub=0;index=(index+1)%N;filled=std::min(N,filled+1);
@@ -50,7 +55,8 @@ private:
  std::array<int,notes> streak{},absence{};
  std::array<bool,notes> held{};
  int divisor=1,index=0,filled=0,sub=0,hop=0;
- double rate=22050,sum=0,noiseRatio=1,recentPeak=0;
+ double rate=22050,sum=0,noiseRatio=1,recentPeak=0,fastEnergy=0,slowEnergy=0,attackAge=0;
+ double samplePeriod=1.0/44100,fastCoefficient=0.0045,slowCoefficient=0.00038;
  float envelope=0;
 
  void spectrum() {
@@ -101,6 +107,9 @@ private:
   int count=0;
   for(int j=0;j<toneCount;++j){const auto& t=tones[j];if(t.hz<68||t.hz>1500)continue;Candidate c;
    if(!map(t.hz,c))continue;c.amp=t.amplitude();
+   // A decaying/muted chord must not keep enrolling fresh notes from its tail.
+   // This measured mode enrolls notes during a strum; it is not a legato mode.
+   if(!held[c.note-first]&&attackAge>0.45)continue;
    double minimum=held[c.note-first]?peak*0.045:std::max(peak*0.14,recentPeak*0.13);
    if(c.amp<=minimum)continue;
    // A new guitar note needs corroborating partials, not just a pick/mute peak.
@@ -113,7 +122,7 @@ private:
   for(int j=0;j<count;++j){auto c=candidates[j];bool harmonic=false,duplicate=false;
    for(int k=0;k<kept;++k){const auto& lower=accepted[k];duplicate|=lower.note==c.note;
     for(int h=1;h<12;++h){auto partial=GuitarProfile::partials[lower.string][h];double expected=lower.hz*partial.ratio;
-     if(std::abs(std::log2(c.hz/expected))<0.04&&c.amp<lower.amp*(partial.amplitude*2.5+0.15))harmonic=true;}}
+     if(std::abs(std::log2(c.hz/expected))<0.04&&c.amp<lower.amp*(std::max(1.0,partial.amplitude*2.5)+0.15))harmonic=true;}}
    if(!harmonic&&!duplicate)accepted[kept++]=c;
   }
   std::sort(accepted.begin(),accepted.begin()+kept,[](const auto& a,const auto& b){return a.amp>b.amp;});
@@ -121,10 +130,12 @@ private:
  }
  void update() {
   strength.fill(0);
-  for(int n=0;n<notes;++n){if(candidateAmp[n]>0){absence[n]=0;double pitch=12*std::log2(candidateHz[n]);
-    streak[n]=streak[n]>0&&std::abs(pitch-prior[n])<0.22?streak[n]+1:1;prior[n]=pitch;
-    if(streak[n]>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];
-   }else{streak[n]=0;if(++absence[n]>=4)held[n]=false;}
+  for(int n=0;n<notes;++n){
+   // Three agreements in six frames tolerate a weak string being briefly masked.
+   streak[n]=((streak[n]<<1)|(candidateAmp[n]>0?1:0))&63;
+   if(candidateAmp[n]>0){absence[n]=0;int votes=0;for(int bits=streak[n];bits;bits>>=1)votes+=bits&1;
+    if(votes>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];
+   }else{absence[n]=std::min(4,absence[n]+1);if(absence[n]>=4)held[n]=false;}
    if(held[n])strength[n]=(float)lastAmplitude[n];}
   // Release tails cannot expand the active voice set beyond six.
   for(int iteration=0;iteration<notes;++iteration){int count=0,weakest=-1;float lowest=1e30f;
