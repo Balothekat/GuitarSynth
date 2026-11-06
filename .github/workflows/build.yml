@@ -6,7 +6,16 @@ on:
 permissions:
   contents: read
 jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Measure tracking and verify chords
+        run: |
+          g++ -std=c++17 -O2 Source/ChordTest.cpp -o chord_test
+          ./chord_test
   build:
+    needs: core
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4

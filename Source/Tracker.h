@@ -12,13 +12,14 @@ public:
   divisor=std::max(1,(int)std::ceil(sr/16000.0)); rate=sr/divisor;
   ring.fill(0); scores.fill(1); index=filled=sub=hop=0; sum=0; envelope=0;
  }
+ void setFast(bool fast){analysisHop=fast?16:32;}
  bool push(float x, float gate, double& hz) {
   envelope += (std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.001f);
   sum+=x;
   if(++sub<divisor) return false;
   float y=sum/divisor; sum=0;sub=0;
   ring[index]=y;index=(index+1)%2048;filled=std::min(filled+1,2048);
-  if(++hop<32) return false;
+  if(++hop<analysisHop) return false;
   hop=0; hz=0;
   if(envelope<gate) return true;
   int lo=std::max(2,(int)(rate/1400.0));
@@ -48,7 +49,7 @@ public:
 private:
  std::array<float,2048> ring{};
  std::array<float,512> scores{};
- int divisor=1,index=0,filled=0,sub=0,hop=0;
+ int divisor=1,index=0,filled=0,sub=0,hop=0,analysisHop=32;
  double rate=16000,sum=0;
  float envelope=0;
 };
