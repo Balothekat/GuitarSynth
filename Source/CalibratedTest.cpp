@@ -14,12 +14,13 @@ int main(){
   for(float v:tracker.getStrengths())if(v>0)ok=false;
  }
  for(double rate:{44100.0,48000.0}){
-  CalibratedTracker tracker;tracker.prepare(rate);std::array<bool,128> seen{};
+  CalibratedTracker tracker;tracker.prepare(rate);std::array<bool,128> seen{},previous{};
   for(int i=0;i<(int)(rate*0.64);++i){double x=0;
    for(int string=0;string<4;++string){double shift=string<2?std::pow(2.0,4.0/12.0):1;
     for(int h=0;h<12;++h){auto p=GuitarProfile::partials[string][h];double f=GuitarProfile::openHz[string]*p.ratio*shift;
      x+=0.012*p.amplitude*std::sin(6.283185307179586*f*i/rate);}}
-   if(tracker.push((float)x,0.008f))for(int n=0;n<CalibratedTracker::notes;++n)if(tracker.getStrengths()[n]>0)seen[n+CalibratedTracker::first]=true;
+   if(tracker.push((float)x,0.008f))for(int n=0;n<CalibratedTracker::notes;++n){int key=n+CalibratedTracker::first;bool active=tracker.getStrengths()[n]>0;
+    if(active){seen[key]=true;if(!previous[key])std::cout<<"MIXED_ON,"<<rate<<','<<i/rate<<','<<key<<','<<tracker.debugFrequency(key)<<','<<tracker.getNoiseRatio()<<'\n';}previous[key]=active;}
   }
   for(int note=0;note<128;++note){bool expected=note==42||note==49||note==52||note==57;
    if(seen[note]!=expected){ok=false;std::cerr<<"Mixed measured-profile regression note "<<note<<" seen "<<seen[note]<<" rate "<<rate<<'\n';}}

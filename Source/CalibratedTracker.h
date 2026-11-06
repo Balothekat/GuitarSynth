@@ -21,13 +21,13 @@ public:
  }
  void reset() {
   ring.fill(0);strength.fill(0);streak.fill(0);absence.fill(0);held.fill(false);
-  prior.fill(0);lastAmplitude.fill(0);heldHz.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;fastEnergy=slowEnergy=0;attackAge=0;
+  prior.fill(0);lastAmplitude.fill(0);heldHz.fill(0);referenceEpoch.fill(-1);attackEpoch=0;index=filled=sub=hop=0;sum=0;envelope=0;recentPeak=0;fastEnergy=slowEnergy=0;attackAge=0;
  }
  bool push(float x,float gate) {
   double square=(double)x*x;fastEnergy+=(square-fastEnergy)*fastCoefficient;
   slowEnergy+=(square-slowEnergy)*slowCoefficient;
   attackAge=std::min(2.0,attackAge+samplePeriod);
-  if(attackAge>0.15&&fastEnergy>slowEnergy*2.2&&fastEnergy>gate*gate)attackAge=0;
+  if(attackAge>0.15&&fastEnergy>slowEnergy*2.2&&fastEnergy>gate*gate){attackAge=0;++attackEpoch;}
   envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.003f);
   sum+=x;if(++sub<divisor)return false;
   ring[index]=sum/divisor;sum=0;sub=0;index=(index+1)%N;filled=std::min(N,filled+1);
@@ -40,6 +40,7 @@ public:
  const Strengths& getStrengths()const{return strength;}
  float level()const{return envelope;}
  double getNoiseRatio()const{return noiseRatio;}
+ double debugFrequency(int note)const{return note>=first&&note<=last?heldHz[note-first]:0;}
 private:
  static constexpr double pi=3.14159265358979323846;
  struct Tone {double hz=0,a=0,b=0;double amplitude()const{return std::hypot(a,b);}};
@@ -53,6 +54,7 @@ private:
  Strengths strength{};
  std::array<double,notes> candidateAmp{},candidateHz{},prior{},lastAmplitude{},heldHz{};
  std::array<int,notes> streak{},absence{};
+ std::array<int,notes> referenceEpoch{};int attackEpoch=0;
  std::array<bool,notes> held{};
  int divisor=1,index=0,filled=0,sub=0,hop=0;
  double rate=22050,sum=0,noiseRatio=1,recentPeak=0,fastEnergy=0,slowEnergy=0,attackAge=0;
@@ -143,7 +145,17 @@ private:
    if(candidateAmp[n]>0){absence[n]=0;int votes=0;for(int bits=streak[n];bits;bits>>=1)votes+=bits&1;
     if(votes>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];heldHz[n]=candidateHz[n];
    }else{absence[n]=std::min(4,absence[n]+1);if(absence[n]>=4)held[n]=false;}
-   if(held[n])strength[n]=(float)lastAmplitude[n];}
+   if(held[n]){strength[n]=(float)lastAmplitude[n];referenceEpoch[n]=attackEpoch;}}
+  // Remember a confirmed lower tone throughout its strum, even when its
+  // fundamental is briefly masked. Its overtones must not become fresh notes.
+  for(int n=0;n<notes;++n)if(strength[n]>0){
+   for(int low=0;low<n&&strength[n]>0;++low)if(referenceEpoch[low]==attackEpoch&&heldHz[low]>0&&heldHz[low]<heldHz[n]*0.75){Candidate mapping;
+    if(!map(heldHz[low],mapping))continue;
+    for(int h=1;h<12;++h){auto part=GuitarProfile::partials[mapping.string][h];
+     if(std::abs(std::log2(heldHz[n]/(heldHz[low]*part.ratio)))<0.04&&strength[n]<lastAmplitude[low]*(std::max(1.0,part.amplitude*2.5)+0.15)){
+      strength[n]=0;held[n]=false;referenceEpoch[n]=-1;break;}}
+   }
+  }
   // A six-string guitar cannot sustain two different frets on the same string.
   // Find a feasible available string for each pitch, strongest evidence first.
   std::array<int,notes> order{};for(int n=0;n<notes;++n)order[n]=n;
@@ -152,7 +164,7 @@ private:
   for(int n:order)if(strength[n]>0){int selected=-1;double best=0.32;
    for(int s=0;s<6;++s)if(!occupied[s]){double position=12*std::log2(heldHz[n]/GuitarProfile::openHz[s]);int fret=(int)std::round(position);double error=std::abs(position-fret);
     if(fret>=0&&fret<=24&&GuitarProfile::openNotes[s]+fret==n+first&&error<best){selected=s;best=error;}}
-   if(selected<0){strength[n]=0;held[n]=false;}else occupied[selected]=true;
+   if(selected<0){strength[n]=0;held[n]=false;referenceEpoch[n]=-1;}else occupied[selected]=true;
   }
   // Release tails cannot expand the active voice set beyond six.
   for(int iteration=0;iteration<notes;++iteration){int count=0,weakest=-1;float lowest=1e30f;
