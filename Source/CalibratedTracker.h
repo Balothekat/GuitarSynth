@@ -9,7 +9,7 @@
 // All storage is allocated with the object; no audio is uploaded by the detector.
 class CalibratedTracker {
 public:
- static constexpr int first=38,last=88,notes=last-first+1,N=2048,hopSize=512;
+ static constexpr int first=38,last=88,notes=last-first+1,N=2048,hopSize=768;
  using Strengths=std::array<float,notes>;
  void prepare(double sr) {
   divisor=std::max(1,(int)std::ceil(sr/24000.0));rate=sr/divisor;
@@ -181,7 +181,7 @@ private:
    streak[n]=((streak[n]<<1)|(candidateAmp[n]>0?1:0))&63;
    if(candidateAmp[n]>0){absence[n]=0;int votes=0;for(int bits=streak[n];bits;bits>>=1)votes+=bits&1;
     if(votes>=3)held[n]=true;lastAmplitude[n]=candidateAmp[n];heldHz[n]=candidateHz[n];
-   }else{absence[n]=std::min(4,absence[n]+1);if(absence[n]>=4)held[n]=false;}
+   }else{absence[n]=std::min(5,absence[n]+1);if(absence[n]>=5)held[n]=false;}
    if(held[n]){strength[n]=(float)lastAmplitude[n];referenceEpoch[n]=attackEpoch;}}
   // Remember a confirmed lower tone throughout its strum, even when its
   // fundamental is briefly masked. Its overtones must not become fresh notes.
