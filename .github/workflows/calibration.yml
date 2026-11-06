@@ -6,8 +6,19 @@ on:
 permissions:
   contents: read
 jobs:
+  synthetic:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify calibrated strings and chord mixture
+        run: |
+          g++ -std=c++17 -O3 Source/CalibratedTest.cpp -o calibrated_test
+          ./calibrated_test
+          g++ -std=c++17 -O3 -pthread Source/CalibratedWorkerTest.cpp -o worker_test
+          ./worker_test
   replay-tool:
-    runs-on: macos-15
+    needs: synthetic
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - name: Compile calibration replay and synthetic checks
