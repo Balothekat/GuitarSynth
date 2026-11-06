@@ -42,7 +42,9 @@ bool chord(double sr,std::vector<int> expected) {
  for(int i=0;i<(int)(sr*0.2);++i)if(tracker.push(0,0.003f))observe();
  for(int n=0;n<ChordTracker::notes;++n) {
   bool wanted=std::find(expected.begin(),expected.end(),n+ChordTracker::first)!=expected.end();
-  if(emitted[n]!=wanted){ok=false;std::cerr<<"Unexpected or missing MIDI candidate "<<n+ChordTracker::first<<"\n";}
+  if(emitted[n]!=wanted){ok=false;std::cerr<<"Unexpected or missing MIDI candidate "<<n+ChordTracker::first<<" sr "<<sr<<" voicing ";
+   for(int key:expected)std::cerr<<key<<",";
+   std::cerr<<"\n";}
  }
  for(float v:tracker.getStrengths())if(v>0)ok=false;
  return ok;
