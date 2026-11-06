@@ -1,2 +1,11 @@
-# 0.2
-Custom original cream-and-sage editor with live input level, input waveform, pitch history and passive note display. Parameter-bound gain, gate, dry/synth levels, harmonics, oscillator selection, ADSR, bend and mute controls. Sine, warm and hollow additive synthesis. Monophonic tracker unchanged. No sampler, chord tracking or effects rack. Minimum macOS 14.0. GUI snapshot and synthetic tracking tests run in GitHub Actions.
+# GuitarLink 0.3
+- Fast Lead: 16-sample analysis hop at the reduced tracking rate; one-frame initial trigger, two-frame pitch-change confirmation.
+- Stable Lead retains the previous hop and initial confirmation.
+- Experimental Chords: fixed-tuning spectral multi-pitch estimation, up to six independent MIDI notes and six synth voices.
+- Global pitch bend disabled and centered in chord mode. Per-string bends / MPE not implemented.
+- New synth attack default is 1 ms; existing saved states retain their values.
+- Mode changes and mute clean up active MIDI notes.
+- Tested synthetic lead/chord tones do not represent a live guitar accuracy guarantee.
+- Monophonic repeated same-pitch picking still does not reliably retrigger. Chord tracking can miss quiet strings, confuse harmonics and struggle with bends / detuning.
+- Chord mode uses a 1024-sample window at approximately 16 kHz: 64-70 ms cold-start observation, plus confirmation, interface and external-synth delay.
+- No zero-latency claim. Hardware latency and actual guitar performance require user testing.

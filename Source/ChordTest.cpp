@@ -37,7 +37,7 @@ bool chord(double sr,std::vector<int> expected) {
 int main() {
  bool ok=true;
  for(double sr:{44100.0,48000.0,96000.0}) {
-  for(auto notes:std::vector<std::vector<int>>{{52,55,59},{57,60,64},{48,52,55},{40,47},{64},{52,53}})
+  for(auto notes:std::vector<std::vector<int>>{{52,55,59},{57,60,64},{48,52,55},{40,47},{64},{52,53},{40,47,52,55,59,64}})
    ok=chord(sr,notes)&&ok;
   for(double f:{82.4069,110.0,220.0,440.0,659.255}) {
    Tracker tracker;tracker.prepare(sr);tracker.setFast(true);double hz=0,delay=-1;int hits=0;

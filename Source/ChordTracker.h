@@ -32,6 +32,7 @@ public:
    norm=std::sqrt(norm);for(float& v:t)v/=std::max(norm,1e-9f);
   }
  }
+ void reset(){ring.fill(0);strength.fill(0);index=filled=sub=hop=0;sum=0;envelope=0;}
  bool push(float x,float gate) {
   envelope+=(std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.001f);
   sum+=x;if(++sub<divisor)return false;
@@ -74,6 +75,9 @@ public:
     fundamental=std::max(fundamental,spectrum[b]);
    if(strength[n]<maximum*0.24f||fundamental<peak*0.065f)strength[n]=0;
   }
+  // A weak octave explained by an active lower fundamental is usually an overtone.
+  for(int n=12;n<notes;++n)
+   if(strength[n-12]>0 && strength[n]<strength[n-12]*0.6f)strength[n]=0;
   // Six outputs maximum; no manufactured chord notes.
   for(int count=0;count<notes-6;++count) {
    int selected=-1;float smallest=1e30f;int positives=0;

@@ -57,6 +57,9 @@ public:
    names[i].setColour(juce::Label::textColourId,ink);
    names[i].setFont(juce::Font(11.0f));
   }
+  addAndMakeVisible(tracking);tracking.setName("Tracking mode");
+  tracking.addItemList({"Fast Lead","Stable Lead","Chords (experimental)"},1);
+  trackingAttachment=std::make_unique<CA>(p.state(),"tracking",tracking);
   addAndMakeVisible(waves);waves.setName("Oscillator");
   waves.addItemList({"Sine","Warm","Hollow"},1);
   waveAttachment=std::make_unique<CA>(p.state(),"wave",waves);
@@ -78,20 +81,23 @@ public:
   for(int i=5;i<9;++i) {
    int x=438+(i-5)*112;names[i].setBounds(x,540,100,20);knobs[i].setBounds(x,562,100,94);
   }
+  tracking.setBounds(620,28,210,34);
   waves.setBounds(658,330,218,32);
   bend.setBounds(38,680,370,24);mute.setBounds(734,680,150,24);
  }
  void paint(juce::Graphics& g) override {
   g.fillAll(paper);g.setColour(ink);g.setFont(juce::Font(34.0f,juce::Font::bold));
   g.drawText("GuitarLink",30,18,300,48,juce::Justification::centredLeft);
-  text(g,"LIVE GUITAR / MIDI + SYNTH",340,30,330,24,12);
-  text(g,"02",842,26,45,30,20);
+  text(g,"LIVE GUITAR / MIDI + SYNTH",340,30,245,24,12);
+  text(g,"03",842,26,45,30,20);
   line(g,24,82,896,82);line(g,24,274,896,274);line(g,24,434,896,434);
   text(g,"TRACKER",36,94,120,22,12);
   float pitch=p.livePitch.load(std::memory_order_relaxed);
   juce::String note=pitch<0?"--":juce::MidiMessage::getMidiNoteName(
     juce::roundToInt(pitch),true,true,3);
-  g.setColour(ink);g.setFont(juce::Font(42.0f));g.drawText(note,36,126,120,56,juce::Justification::centredLeft);
+  int detected=p.liveCount.load(std::memory_order_relaxed);
+  if(detected>1)note=juce::String(detected)+" notes";
+  g.setColour(ink);g.setFont(juce::Font(detected>1?28.0f:42.0f));g.drawText(note,36,126,120,56,juce::Justification::centredLeft);
   float level=p.inputLevel.load(std::memory_order_relaxed);
   text(g,juce::String(juce::Decibels::gainToDecibels(juce::jmax(level,0.00001f)),1)+" dB",
     36,188,110,24,13);
@@ -102,7 +108,8 @@ public:
   g.fillRoundedRectangle(166,247-130*meter,14,130*meter,3);
   drawTracker(g);
   text(g,"OSCILLATOR",654,296,226,20,12);
-  text(g,"Single-note tracking",654,373,226,20,13);
+  int mode=tracking.getSelectedId();
+  text(g,mode==3?"Experimental / up to 6 notes":mode==1?"Fast single-note response":"Stable single-note response",654,373,226,20,12);
   text(g,"Clean DI gives the clearest result",654,396,226,18,11);
   text(g,"INPUT WAVEFORM",36,450,340,24,12);
   drawScope(g);
@@ -117,12 +124,12 @@ private:
  std::array<juce::Slider,9> knobs;
  std::array<juce::Label,9> names;
  std::array<std::unique_ptr<SA>,9> attachments;
- juce::ComboBox waves;juce::ToggleButton bend,mute;
- std::unique_ptr<CA> waveAttachment;std::unique_ptr<BA> bendAttachment,muteAttachment;
+ juce::ComboBox tracking,waves;juce::ToggleButton bend,mute;
+ std::unique_ptr<CA> trackingAttachment,waveAttachment;std::unique_ptr<BA> bendAttachment,muteAttachment;
  juce::TooltipWindow tips{this,700};
  std::array<float,180> history{};
  int head=0;
- void timerCallback() override {history[head]=p.livePitch.load(std::memory_order_relaxed);
+ void timerCallback() override {bend.setEnabled(tracking.getSelectedId()!=3);history[head]=p.livePitch.load(std::memory_order_relaxed);
   head=(head+1)%180;repaint();}
  void text(juce::Graphics& g,const juce::String& s,int x,int y,int w,int h,float font){
   g.setColour(ink);g.setFont(juce::Font(font));g.drawText(s,x,y,w,h,juce::Justification::centredLeft);
@@ -149,14 +156,15 @@ private:
    g.fillEllipse(r.getRight()-7,dotY-3,6,6);
   }
   // Passive note display: incoming guitar controls this keyboard.
-  float live=p.livePitch.load();int current=live<0?-1:juce::roundToInt(live);
+  auto mask=p.activeMask.load(std::memory_order_relaxed);
+  auto lit=[&](int key){return key>=40&&key<=88&&(mask&(uint64_t(1)<<(key-40)))!=0;};
   const int whites[]={0,2,4,5,7,9,11};
   for(int i=0;i<14;++i) {
    int n=48+(i/7)*12+whites[i%7];float x=660+i*15.5f;
-   g.setColour(n==current?green:juce::Colour(0xffe2e8d7));
+   g.setColour(lit(n)?green:juce::Colour(0xffe2e8d7));
    g.fillRect(x,122.0f,15.0f,104.0f);g.setColour(grid);g.drawRect(x,122.0f,15.0f,104.0f);
    if(whites[i%7]!=4&&whites[i%7]!=11) {
-    g.setColour(n+1==current?ink:juce::Colour(0xffa8b7a4));g.fillRect(x+10,122.0f,9.0f,62.0f);
+    g.setColour(lit(n+1)?ink:juce::Colour(0xffa8b7a4));g.fillRect(x+10,122.0f,9.0f,62.0f);
    }
   }
   text(g,"DETECTED NOTES  /  C2 - B3",660,236,222,18,10);

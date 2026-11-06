@@ -12,6 +12,7 @@ public:
   divisor=std::max(1,(int)std::ceil(sr/16000.0)); rate=sr/divisor;
   ring.fill(0); scores.fill(1); index=filled=sub=hop=0; sum=0; envelope=0;
  }
+ void reset(){ring.fill(0);scores.fill(1);index=filled=sub=hop=0;sum=0;envelope=0;}
  void setFast(bool fast){analysisHop=fast?16:32;}
  bool push(float x, float gate, double& hz) {
   envelope += (std::abs(x)-envelope)*(std::abs(x)>envelope?0.02f:0.001f);
